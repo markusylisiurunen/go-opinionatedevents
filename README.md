@@ -64,26 +64,26 @@ Now, the only thing you need to change when deploying to e.g. GCP is the followi
 
 ```go
 func GetCloudPubSubPublisher() *events.Publisher {
-    // define the Cloud Pub/Sub destination to one `core` topic...
-    dest := events.NewCloudPubSubDestination(events.WithCloudPubSubTopic("core"))
+	// define the Cloud Pub/Sub destination to one `core` topic...
+	dest := events.NewCloudPubSubDestination(events.WithCloudPubSubTopic("core"))
 
-    // ... or you can define your custom event to topic mapper function
-    dest = events.NewCloudPubSubDestination(
-        events.WithCloudPubSubTopicMapper(func (m *events.Message) string {
-            if strings.HasPrefix(m.Name, "users.") {
-                return "users"
-            }
+	// ... or you can define your custom event to topic mapper function
+	dest = events.NewCloudPubSubDestination(
+		events.WithCloudPubSubTopicMapper(func(m *events.Message) string {
+			if strings.HasPrefix(m.Name, "users.") {
+				return "users"
+			}
 
-            return "core"
-        })
-    )
+			return "core"
+		}),
+	)
 
-    // initialise the publisher with the an "async bridge"
-    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
+	// initialise the publisher with the an "async bridge"
+	publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
 	if err != nil {
 		panic(err)
 	}
 
-    return publisher
+	return publisher
 }
 ```
