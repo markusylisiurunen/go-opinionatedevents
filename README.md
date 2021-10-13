@@ -44,19 +44,19 @@ any specific tool and allows you to develop locally without requiring any extra 
 
 ```go
 func GetLocalPublisher() *events.Publisher {
-    // define the local destination(s) (i.e. the services you have running locally)
-    dest := events.NewHttpDestination()
+	// define the local destination(s) (i.e. the services you have running locally)
+	dest := events.NewHttpDestination()
 
 	dest.AddEndpoint("http://localhost:8080/_events/local")
 	dest.AddEndpoint("http://localhost:8081/_events/local")
 
-    // initialise the publisher with the an "async bridge"
-    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
+	// initialise the publisher with the an "async bridge"
+	publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
 	if err != nil {
 		panic(err)
 	}
 
-    return publisher
+	return publisher
 }
 ```
 
