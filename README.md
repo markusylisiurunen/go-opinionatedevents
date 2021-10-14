@@ -46,7 +46,22 @@ with ease.
 
 ## This solution
 
-> **TODO:** ...
+This solution is split into three separate concepts, a **publisher**, a **bridge**, and a
+**destination**.
+
+**Destination** is the component which receives a single message to be delivered to a destination.
+Its only concern is to try to send the received message to the destination and nothing more, making
+it a very dumb component. The meaning of "delivered" depends on which destination we are using. For
+example, a message is delivered to Cloud Pub/Sub whenever Cloud Pub/Sub has acknowledged of
+receiving it.
+
+The **bridge**'s responsibility is to use the given destination to either synchronously or
+asynchronously deliver a published message to the destination. Depending on which type of bridge is
+used, it may retry failed attempts, buffer messages before sending them, or have any other logic
+between publishing the message from the code to actually sending the message to the destination.
+
+The final piece is the **publisher**. This is the client-facing component of which API is used to
+publish the actual messages to the event bus.
 
 ## Quickstart
 
