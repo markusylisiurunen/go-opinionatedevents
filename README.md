@@ -1,89 +1,98 @@
 # Opinionated Events
 
+**Table of Contents**
+
+1. [The problem](#the-problem)
+2. [This solution](#this-solution)
+3. [Quickstart](#quickstart)
+   1. [Local](#local)
+   2. [Cloud Pub/Sub](#cloud-pubsub)
+
 ## The problem
 
-Quite often when building real-world applications you will have situations where you need to perform
-multiple, dependent, tasks when an action occurs. As an example, when a new user is created, you
-might want to do any number of the following actions.
+When building real-world applications, we often have situations where we need to perform multiple,
+dependent tasks in response to some trigger. For example, when a new user is created, we might want
+to do any number of the following actions:
 
-- Create a new user in your database
-- Send the user a verification email
-- Insert a new customer in your CRM
-- Add the newly created customer to an emailing list
-- Add boilerplate content to the user's account
-- Send a notification to your Slack channel
-- ... and so on
+- Create a new user in our database.
+- Send the user a verification email.
+- Add the user's information to our CRM.
+- Add the new user to an emailing list.
+- Create a corresponding customer in Stripe.
 
-You might even have multiple layers of these actions where an action `A` happens in your system,
-actions `B` and `C` follow action `A`, and action `D` follows action `B`. You end up with a graph of
-dependent tasks.
+These were just a few examples of one possible situation. In general, we can describe such a
+situation with a graph-like structure of different actions that need to happen in a particular
+order. Still, they may not necessarily need to block the "primary" action, nor do they need to be
+executed within a single transaction.
 
-Now, a fairly standard way of solving this kind of flows are event-driven architectures. You have
-some _topics_ where you post _events_ and then the attached _queues_ pick the events and send them
-to any service that processes these events. At this point, I want to point out that microservices
-are **not** a requirement for this. You can very well have a monolithic application but leverage the
-benefits of an event-driven architecture.
+Event-driven architectures can help solve this problem by decoupling the primary action from the
+secondary or tertiary actions by introducing a layer in the middle. This new layer will take care of
+broadcasting events to all interested parties, retrying failed deliveries with a backoff, persisting
+events over system outages, and so on. Our responsibility is only to publish the events of interest
+to the event bus and implementing the logic for handling these events.
 
-There are many services that handle the actual broadcasting of the events, such as
-[RabbitMQ](https://www.rabbitmq.com), [AWS SQS](https://aws.amazon.com/sqs/), and
-[Cloud Pub/Sub](https://cloud.google.com/pubsub). Whatever service you end up picking, you most
-likely will want to implement a thin abstraction layer on top of it in your code to allow things
-like
+Many existing services can be used as a message broker. In addition to open-source solutions like
+[RabbitMQ](https://www.rabbitmq.com), some cloud providers have their own managed services, such as
+[AWS SNS](https://aws.amazon.com/sns) and [Cloud Pub/Sub](https://cloud.google.com/pubsub). Without
+a proper abstraction layer between our code and the chosen message broker, we might run into issues
+when setting up our local development environment or testing our code. It would be good not to
+depend on any specific message broker implementation but rather to be able to switch between
+different ways of delivering (or not delivering at all) events from one service to another.
 
-- publishing and receiving events locally when developing
-- switching the service e.g. from Cloud Pub/Sub to SQS
-- enforcing a consistent schema for the events
-- ... and so on.
-
-This is what this package is for.
+This package tries to provide a minimal abstraction between our code and the chosen message broker.
+The goal is to allow zero local dependencies and allow testing asynchronous, event-based systems
+with ease.
 
 ## This solution
 
-This solution allows you to easily setup your service(s) so that you are not locking yourself in to
-any specific tool and allows you to develop locally without requiring any extra services.
+> **TODO:** ...
+
+## Quickstart
+
+### Local
 
 ```go
 func GetLocalPublisher() *events.Publisher {
-	// define the local destination(s) (i.e. the services you have running locally)
-	dest := events.NewHttpDestination()
+    // define the local destination(s) (i.e. the services you have running locally, including the current service)
+    dest := events.NewHttpDestination()
 
-	dest.AddEndpoint("http://localhost:8080/_events/local")
-	dest.AddEndpoint("http://localhost:8081/_events/local")
+    dest.AddEndpoint("http://localhost:8080/_events/local")
+    dest.AddEndpoint("http://localhost:8081/_events/local")
 
-	// initialise the publisher with the an "async bridge"
-	publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
-	if err != nil {
-		panic(err)
-	}
+    // initialise the publisher with an async bridge
+    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
+    if err != nil {
+        panic(err)
+    }
 
-	return publisher
+    return publisher
 }
 ```
 
-Now, the only thing you need to change when deploying to e.g. GCP is the following.
+### Cloud Pub/Sub
 
 ```go
 func GetCloudPubSubPublisher() *events.Publisher {
-	// define the Cloud Pub/Sub destination to one `core` topic...
-	dest := events.NewCloudPubSubDestination(events.WithCloudPubSubTopic("core"))
+    // define the Cloud Pub/Sub destination to one `core` topic
+    destOne := events.NewCloudPubSubDestination(events.WithCloudPubSubTopic("core"))
 
-	// ... or you can define your custom event to topic mapper function
-	dest = events.NewCloudPubSubDestination(
-		events.WithCloudPubSubTopicMapper(func(m *events.Message) string {
-			if strings.HasPrefix(m.Name, "users.") {
-				return "users"
-			}
+    // or define a custom mapper from the message to a Cloud Pub/Sub topic
+    destTwo := events.NewCloudPubSubDestination(
+        events.WithCloudPubSubTopicMapper(func(msg *events.Message) string {
+            if strings.HasPrefix(msg.Name, "users.") {
+                return "users"
+            }
 
-			return "core"
-		}),
-	)
+            return "core"
+        }),
+    )
 
-	// initialise the publisher with the an "async bridge"
-	publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
-	if err != nil {
-		panic(err)
-	}
+    // initialise the publisher with an async bridge
+    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, destOne))
+    if err != nil {
+        panic(err)
+    }
 
-	return publisher
+    return publisher
 }
 ```
