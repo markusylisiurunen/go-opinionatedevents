@@ -7,6 +7,7 @@
 3. [Quickstart](#quickstart)
    1. [Local](#local)
    2. [Cloud Pub/Sub](#cloud-pubsub)
+   3. [Custom](#custom)
 
 ## The problem
 
@@ -89,6 +90,32 @@ func GetCloudPubSubPublisher() *events.Publisher {
 
     // initialise the publisher with an async bridge
     publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, destOne))
+    if err != nil {
+        panic(err)
+    }
+
+    return publisher
+}
+```
+
+### Custom
+
+```go
+type StdOutDestination struct{}
+
+func (d *StdOutDestination) Deliver(message *events.Message) error {
+    fmt.Printf("received a message: %s\n", message.Name)
+    return nil
+}
+
+func NewStdOutDestination() *StdOutDestination {
+    return &StdOutDestination{}
+}
+
+func GetCustomPublisher() *events.Publisher {
+    dest := NewStdOutDestination()
+
+    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
     if err != nil {
         panic(err)
     }
