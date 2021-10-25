@@ -1,0 +1,43 @@
+name: Test
+
+on: push
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "^1.16"
+
+      - name: Lint with golangci-lint
+        uses: golangci/golangci-lint-action@v2
+        with:
+          version: v1.29
+          skip-go-installation: true
+
+      - name: Lint
+        run: |
+          gofmt -l -e .
+          go vet ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "^1.16"
+
+      - name: Test
+        run: |
+          go test -race ./...
