@@ -68,7 +68,11 @@ func TestSyncBridge(t *testing.T) {
 		})
 
 		startAt := time.Now()
-		bridge.take(NewMessage("test"))
+
+		if err := bridge.take(NewMessage("test")); err != nil {
+			t.Fatal(err)
+		}
+
 		overAt := time.Now()
 
 		if overAt.Sub(startAt).Milliseconds() < int64(waitFor) {

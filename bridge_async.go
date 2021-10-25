@@ -1,6 +1,7 @@
 package opinionatedevents
 
 import (
+	"log"
 	"sync"
 	"time"
 )
@@ -47,6 +48,7 @@ func (b *asyncBridge) start() {
 			for _, d := range b.destinations {
 				if err := d.deliver(next); err != nil {
 					// TODO: somehow queue the message again and track attempts
+					log.Fatal(err)
 				}
 			}
 		}
