@@ -1,69 +1,97 @@
 package opinionatedevents
 
 import (
-	"log"
+	"fmt"
 	"sync"
 	"time"
 )
 
-type asyncBridge struct {
-	destinations []destination
-	buffer       []*Message
-	mutex        *sync.Mutex
-	signal       chan struct{}
+type asyncBridgeDeliveryConfig struct {
+	maxAttempts int
+	waitBetween int
 }
 
-func (b *asyncBridge) take(m *Message) error {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
+type asyncBridge struct {
+	destinations   []destination
+	wg             *sync.WaitGroup
+	deliveryConfig *asyncBridgeDeliveryConfig
+}
 
-	b.buffer = append(b.buffer, m)
-
-	if len(b.buffer) == 1 {
-		b.signal <- struct{}{}
-	}
-
+func (b *asyncBridge) take(message *Message) error {
+	b.wg.Add(1)
+	go b.deliver(message)
 	return nil
 }
 
 func (b *asyncBridge) drain() {
-	// TODO: what the hell to do here?
-	time.Sleep(1 * time.Second)
+	b.wg.Wait()
 }
 
-func (b *asyncBridge) start() {
-	go func() {
-		for {
-			if len(b.buffer) == 0 {
-				<-b.signal
+func (b *asyncBridge) deliver(message *Message) {
+	defer b.wg.Done()
+
+	destinations := b.destinations
+	attemptsLeft := b.deliveryConfig.maxAttempts
+
+	for attemptsLeft > 0 {
+		attemptsLeft -= 1
+
+		// try delivering the message to all (pending) destinations
+		deliveredDestinations := []int{}
+
+		for i, destination := range destinations {
+			if err := destination.deliver(message); err != nil {
+				// TODO: how to log errors?
+				fmt.Printf("%s\n", err.Error())
+				continue
 			}
 
-			b.mutex.Lock()
+			deliveredDestinations = append(deliveredDestinations, i)
+		}
 
-			next := b.buffer[0]
-			b.buffer = b.buffer[1:]
+		// remove the delivered destinations from the pending list
+		tmp := []destination{}
 
-			b.mutex.Unlock()
+		for i, destination := range destinations {
+			// check if this destination was successful
+			successful := false
 
-			for _, d := range b.destinations {
-				if err := d.deliver(next); err != nil {
-					// TODO: somehow queue the message again and track attempts
-					log.Fatal(err)
+			for _, u := range deliveredDestinations {
+				if u == i {
+					successful = true
+					break
 				}
 			}
+
+			// if it was not successful, we will try again
+			if !successful {
+				tmp = append(tmp, destination)
+			}
 		}
-	}()
+
+		destinations = tmp
+
+		if len(destinations) == 0 {
+			break
+		}
+
+		if attemptsLeft > 0 {
+			waitFor := time.Duration(b.deliveryConfig.waitBetween)
+			time.Sleep(waitFor * time.Millisecond)
+		}
+	}
 }
 
 func newAsyncBridge(destinations ...destination) *asyncBridge {
 	bridge := &asyncBridge{
 		destinations: destinations,
-		buffer:       []*Message{},
-		mutex:        &sync.Mutex{},
-		signal:       make(chan struct{}, 1),
-	}
+		wg:           &sync.WaitGroup{},
 
-	bridge.start()
+		deliveryConfig: &asyncBridgeDeliveryConfig{
+			maxAttempts: 3,
+			waitBetween: 1000,
+		},
+	}
 
 	return bridge
 }

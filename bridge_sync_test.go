@@ -8,7 +8,7 @@ import (
 
 func TestSyncBridge(t *testing.T) {
 	t.Run("fails if handler is not pushed", func(t *testing.T) {
-		destination := newTestSyncDestination()
+		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
 		if err := bridge.take(NewMessage("test")); err == nil {
@@ -25,7 +25,7 @@ func TestSyncBridge(t *testing.T) {
 	})
 
 	t.Run("synchronously handles events", func(t *testing.T) {
-		destination := newTestSyncDestination()
+		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
 		countToHandle := 5
@@ -57,7 +57,7 @@ func TestSyncBridge(t *testing.T) {
 	})
 
 	t.Run("synchronously waits for slow delivery", func(t *testing.T) {
-		destination := newTestSyncDestination()
+		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
 		waitFor := 250
@@ -81,7 +81,7 @@ func TestSyncBridge(t *testing.T) {
 	})
 
 	t.Run("fails if message could not be delivered", func(t *testing.T) {
-		destination := newTestSyncDestination()
+		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
 		expectedErr := fmt.Errorf("something went wrong")
@@ -94,42 +94,4 @@ func TestSyncBridge(t *testing.T) {
 			t.Errorf("expected error to not be nil")
 		}
 	})
-}
-
-type testSyncDestination struct {
-	handlers []func(message *Message) error
-}
-
-func (d *testSyncDestination) deliver(message *Message) error {
-	handler, err := d.nextHandler()
-	if err != nil {
-		return err
-	}
-
-	if err := handler(message); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (d *testSyncDestination) nextHandler() (func(message *Message) error, error) {
-	if len(d.handlers) == 0 {
-		return nil, fmt.Errorf("no handlers left")
-	}
-
-	handler := d.handlers[0]
-	d.handlers = d.handlers[1:]
-
-	return handler, nil
-}
-
-func (d *testSyncDestination) pushHandler(handler func(message *Message) error) {
-	d.handlers = append(d.handlers, handler)
-}
-
-func newTestSyncDestination() *testSyncDestination {
-	return &testSyncDestination{
-		handlers: []func(message *Message) error{},
-	}
 }
