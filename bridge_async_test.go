@@ -3,6 +3,7 @@ package opinionatedevents
 import (
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestAsyncBridge(t *testing.T) {
@@ -93,6 +94,32 @@ func TestAsyncBridge(t *testing.T) {
 				bridge.deliveryConfig.maxAttempts,
 				attempts,
 			)
+		}
+	})
+
+	t.Run("drain waits for slow deliveries", func(t *testing.T) {
+		destination := newTestDestination()
+		bridge := newAsyncBridge(destination)
+
+		waitFor := 500
+
+		destination.pushHandler(func(_ *Message) error {
+			time.Sleep(time.Duration(waitFor) * time.Millisecond)
+			return nil
+		})
+
+		if err := bridge.take(NewMessage("test")); err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		start := time.Now()
+		bridge.drain()
+
+		duration := time.Since(start).Milliseconds()
+
+		if duration < int64(waitFor) {
+			t.Errorf("expected duration to be at least %d ms, it was %d ms", waitFor, duration)
 		}
 	})
 }
