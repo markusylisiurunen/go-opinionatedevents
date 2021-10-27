@@ -1,13 +1,26 @@
+> ## ⚠️ Work in Progress
+>
+> This package is still work in progress and is not recommended to be used.
+
 # Opinionated Events
+
+[![Go Reference](https://pkg.go.dev/badge/markusylisiurunen/go-opinionated-events.svg)](https://pkg.go.dev/markusylisiurunen/go-opinionated-events)
 
 **Table of Contents**
 
-1. [The problem](#the-problem)
-2. [This solution](#this-solution)
-3. [Quickstart](#quickstart)
+1. [Install](#install)
+2. [The problem](#the-problem)
+3. [This solution](#this-solution)
+4. [Quickstart](#quickstart)
    1. [Local](#local)
    2. [Cloud Pub/Sub](#cloud-pubsub)
    3. [Custom](#custom)
+
+## Install
+
+```sh
+go get github.com/markusylisiurunen/go-opinionated-events
+```
 
 ## The problem
 
