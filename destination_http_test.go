@@ -75,8 +75,8 @@ func TestHTTPDestination(t *testing.T) {
 
 		msg := NewMessage("test")
 
-		err := msg.SetPayload(&testHTTPClientPayload{})
-		assert.NoError(t, err)
+		payloadErr := msg.SetPayload(&testHTTPClientPayload{})
+		assert.NoError(t, payloadErr)
 
 		client.pushHandler(func(req *http.Request) (*http.Response, error) {
 			assert.Equal(t, "POST", req.Method)
@@ -117,8 +117,8 @@ func TestHTTPDestination(t *testing.T) {
 			return &http.Response{StatusCode: 200}, nil
 		})
 
-		err := destination.deliver(msg)
-		assert.NoError(t, err)
+		deliveryErr := destination.deliver(msg)
+		assert.NoError(t, deliveryErr)
 	})
 }
 
