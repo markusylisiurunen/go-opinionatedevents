@@ -75,7 +75,8 @@ func TestHTTPDestination(t *testing.T) {
 
 		msg := NewMessage("test")
 
-		msg.SetPayload(&testHTTPClientPayload{})
+		err := msg.SetPayload(&testHTTPClientPayload{})
+		assert.NoError(t, err)
 
 		client.pushHandler(func(req *http.Request) (*http.Response, error) {
 			assert.Equal(t, "POST", req.Method)
