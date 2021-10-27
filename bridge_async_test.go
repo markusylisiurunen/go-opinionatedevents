@@ -66,6 +66,49 @@ func TestAsyncBridge(t *testing.T) {
 		}
 	})
 
+	t.Run("retries delivering a failed message only for failed destinations", func(t *testing.T) {
+		destination1 := newTestDestination()
+		destination2 := newTestDestination()
+
+		bridge := newAsyncBridge(destination1, destination2)
+
+		bridge.deliveryConfig.waitBetween = 0
+
+		attempts := []int{0, 0}
+
+		for i, d := range []*testDestination{destination1, destination2} {
+			attemptIndex := i
+			shouldFail := i == 0
+
+			for u := 0; u < bridge.deliveryConfig.maxAttempts; u += 1 {
+				d.pushHandler(func(_ *Message) error {
+					attempts[attemptIndex] = attempts[attemptIndex] + 1
+
+					if shouldFail {
+						return fmt.Errorf("delivery failed")
+					} else {
+						return nil
+					}
+				})
+			}
+		}
+
+		if err := bridge.take(NewMessage("test")); err != nil {
+			t.Error(err.Error())
+			return
+		}
+
+		bridge.drain()
+
+		if attempts[0] != 3 {
+			t.Errorf("expected destination 1 call count to be 3 but was %d", attempts[0])
+		}
+
+		if attempts[1] != 1 {
+			t.Errorf("expected destination 2 call count to be 1 but was %d", attempts[1])
+		}
+	})
+
 	t.Run("gives up delivering a message after max attempts", func(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newAsyncBridge(destination)
