@@ -1,34 +1,50 @@
 package opinionatedevents
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"net/http"
 )
 
+type httpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 type HttpDestination struct {
-	endpoints []string
+	endpoint string
+	client   httpClient
 }
 
 func (d *HttpDestination) deliver(m *Message) error {
-	// TODO: make the actual HTTP requests here...
-	for _, endpoint := range d.endpoints {
-		fmt.Printf("sending to %s\n", endpoint)
+	payload, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
 
-		d, err := json.MarshalIndent(m, "", "  ")
-		if err != nil {
-			return err
-		}
+	req, err := http.NewRequest(http.MethodPost, d.endpoint, bytes.NewBuffer(payload))
+	if err != nil {
+		return err
+	}
 
-		fmt.Printf("%s\n", d)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := d.client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	ok := resp.StatusCode >= 200 && resp.StatusCode < 300
+	if !ok {
+		return fmt.Errorf("endpoint returned a %d status", resp.StatusCode)
 	}
 
 	return nil
 }
 
-func (d *HttpDestination) AddEndpoint(endpoint string) {
-	d.endpoints = append(d.endpoints, endpoint)
-}
-
-func NewHttpDestination() *HttpDestination {
-	return &HttpDestination{}
+func NewHttpDestination(endpoint string) *HttpDestination {
+	return &HttpDestination{
+		endpoint: endpoint,
+		client:   http.DefaultClient,
+	}
 }
