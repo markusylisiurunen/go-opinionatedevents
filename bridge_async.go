@@ -82,14 +82,18 @@ func (b *asyncBridge) deliver(msg *Message) {
 	}
 }
 
-func newAsyncBridge(destinations ...destination) *asyncBridge {
+func newAsyncBridge(
+	maxDeliveryAttempts int,
+	waitBetweenAttempts int,
+	destinations ...destination,
+) *asyncBridge {
 	bridge := &asyncBridge{
 		destinations: destinations,
 		wg:           &sync.WaitGroup{},
 
 		deliveryConfig: &asyncBridgeDeliveryConfig{
-			maxAttempts: 3,
-			waitBetween: 1000,
+			maxAttempts: maxDeliveryAttempts,
+			waitBetween: waitBetweenAttempts,
 		},
 	}
 

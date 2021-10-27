@@ -10,9 +10,9 @@ type sendableMessageMeta struct {
 }
 
 type sendableMessage struct {
-	Name    string               `json:"name"`
-	Payload []byte               `json:"payload"`
-	Meta    *sendableMessageMeta `json:"meta"`
+	Name    string              `json:"name"`
+	Payload []byte              `json:"payload"`
+	Meta    sendableMessageMeta `json:"meta"`
 }
 
 type Payloadable interface {
@@ -43,7 +43,8 @@ func (msg *Message) MarshalJSON() ([]byte, error) {
 	tmp := &sendableMessage{
 		Name:    msg.name,
 		Payload: msg.payload,
-		Meta: &sendableMessageMeta{
+
+		Meta: sendableMessageMeta{
 			Timestamp: msg.meta.timestamp.UTC(),
 		},
 	}

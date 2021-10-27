@@ -64,7 +64,7 @@ func NewPubSubDestination(projectID string, topic string) (*PubSubDestination, e
 
 func NewPubSubDestinationWithCustomTopics(
 	projectID string,
-	getTopic func(msg *Message) string,
+	messageToTopic func(msg *Message) string,
 ) (*PubSubDestination, error) {
 	ctx := context.Background()
 
@@ -76,6 +76,6 @@ func NewPubSubDestinationWithCustomTopics(
 	return &PubSubDestination{
 		client:      client,
 		topics:      map[string]*pubsub.Topic{},
-		topicMapper: getTopic,
+		topicMapper: messageToTopic,
 	}, nil
 }

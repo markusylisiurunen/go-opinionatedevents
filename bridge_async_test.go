@@ -9,7 +9,7 @@ import (
 func TestAsyncBridge(t *testing.T) {
 	t.Run("delivers a message", func(t *testing.T) {
 		destination := newTestDestination()
-		bridge := newAsyncBridge(destination)
+		bridge := newAsyncBridge(3, 500, destination)
 
 		bridge.deliveryConfig.waitBetween = 0
 
@@ -34,7 +34,7 @@ func TestAsyncBridge(t *testing.T) {
 
 	t.Run("retries delivering a failed message", func(t *testing.T) {
 		destination := newTestDestination()
-		bridge := newAsyncBridge(destination)
+		bridge := newAsyncBridge(3, 500, destination)
 
 		bridge.deliveryConfig.waitBetween = 0
 
@@ -70,7 +70,7 @@ func TestAsyncBridge(t *testing.T) {
 		destination1 := newTestDestination()
 		destination2 := newTestDestination()
 
-		bridge := newAsyncBridge(destination1, destination2)
+		bridge := newAsyncBridge(3, 500, destination1, destination2)
 
 		bridge.deliveryConfig.waitBetween = 0
 
@@ -111,7 +111,7 @@ func TestAsyncBridge(t *testing.T) {
 
 	t.Run("gives up delivering a message after max attempts", func(t *testing.T) {
 		destination := newTestDestination()
-		bridge := newAsyncBridge(destination)
+		bridge := newAsyncBridge(3, 500, destination)
 
 		bridge.deliveryConfig.maxAttempts = 3
 		bridge.deliveryConfig.waitBetween = 0
@@ -142,7 +142,7 @@ func TestAsyncBridge(t *testing.T) {
 
 	t.Run("drain waits for slow deliveries", func(t *testing.T) {
 		destination := newTestDestination()
-		bridge := newAsyncBridge(destination)
+		bridge := newAsyncBridge(3, 500, destination)
 
 		waitFor := 500
 

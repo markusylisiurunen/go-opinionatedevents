@@ -48,13 +48,17 @@ func WithSyncBridge(destinations ...destination) PublisherOption {
 	}
 }
 
-func WithAsyncBridge(maxBuffer int, maxDelay int, destinations ...destination) PublisherOption {
+func WithAsyncBridge(
+	maxAttempts int,
+	waitBetweenAttempts int,
+	destinations ...destination,
+) PublisherOption {
 	return func(p *Publisher) error {
 		if p.bridge != nil {
 			return errors.New("cannot initialise bridge more than once")
 		}
 
-		p.bridge = newAsyncBridge(destinations...)
+		p.bridge = newAsyncBridge(maxAttempts, waitBetweenAttempts, destinations...)
 
 		return nil
 	}
