@@ -4,7 +4,7 @@
 
 # Opinionated Events
 
-[![Go Reference](https://pkg.go.dev/badge/markusylisiurunen/go-opinionated-events.svg)](https://pkg.go.dev/markusylisiurunen/go-opinionated-events)
+[![Go Reference](https://pkg.go.dev/badge/github.com/markusylisiurunen/go-opinionated-events.svg)](https://pkg.go.dev/github.com/markusylisiurunen/go-opinionated-events)
 
 **Table of Contents**
 
