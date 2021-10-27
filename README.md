@@ -70,13 +70,13 @@ publish the actual messages to the event bus.
 ```go
 func GetLocalPublisher() *events.Publisher {
     // define the local destination(s) (i.e. the services you have running locally, including the current service)
-    dest := events.NewHttpDestination()
-
-    dest.AddEndpoint("http://localhost:8080/_events/local")
-    dest.AddEndpoint("http://localhost:8081/_events/local")
+    destOne := events.NewHttpDestination("http://localhost:8080/_events/local")
+    destTwo := events.NewHttpDestination("http://localhost:8081/_events/local")
 
     // initialise the publisher with an async bridge
-    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
+    publisher, err := events.NewPublisher(
+        events.WithAsyncBridge(10, 200, destOne, destTwo),
+    )
     if err != nil {
         panic(err)
     }
@@ -90,21 +90,24 @@ func GetLocalPublisher() *events.Publisher {
 ```go
 func GetCloudPubSubPublisher() *events.Publisher {
     // define the Cloud Pub/Sub destination to one `core` topic
-    destOne := events.NewCloudPubSubDestination(events.WithCloudPubSubTopic("core"))
+    destOne := events.NewCloudPubSubDestination("project-id", "core")
 
     // or define a custom mapper from the message to a Cloud Pub/Sub topic
-    destTwo := events.NewCloudPubSubDestination(
-        events.WithCloudPubSubTopicMapper(func(msg *events.Message) string {
+    destTwo := events.NewPubSubDestinationWithCustomTopics(
+        "project-id",
+        func(msg *events.Message) string {
             if strings.HasPrefix(msg.Name, "users.") {
                 return "users"
             }
 
             return "core"
-        }),
+        },
     )
 
     // initialise the publisher with an async bridge
-    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, destOne))
+    publisher, err := events.NewPublisher(
+        events.WithAsyncBridge(10, 200, destOne, destTwo),
+    )
     if err != nil {
         panic(err)
     }
@@ -118,8 +121,8 @@ func GetCloudPubSubPublisher() *events.Publisher {
 ```go
 type StdOutDestination struct{}
 
-func (d *StdOutDestination) Deliver(message *events.Message) error {
-    fmt.Printf("received a message: %s\n", message.Name)
+func (d *StdOutDestination) Deliver(msg *events.Message) error {
+    fmt.Printf("received a message: %s\n", msg.Name)
     return nil
 }
 
@@ -130,7 +133,9 @@ func NewStdOutDestination() *StdOutDestination {
 func GetCustomPublisher() *events.Publisher {
     dest := NewStdOutDestination()
 
-    publisher, err := events.NewPublisher(events.WithAsyncBridge(10, 200, dest))
+    publisher, err := events.NewPublisher(
+        events.WithAsyncBridge(10, 200, dest),
+    )
     if err != nil {
         panic(err)
     }
