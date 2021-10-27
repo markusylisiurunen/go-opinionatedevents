@@ -28,23 +28,23 @@ type Message struct {
 	}
 }
 
-func (m *Message) SetPayload(payload Payloadable) error {
+func (msg *Message) SetPayload(payload Payloadable) error {
 	data, err := payload.MarshalPayload()
 	if err != nil {
 		return err
 	}
 
-	m.payload = data
+	msg.payload = data
 
 	return nil
 }
 
-func (m *Message) MarshalJSON() ([]byte, error) {
+func (msg *Message) MarshalJSON() ([]byte, error) {
 	tmp := &sendableMessage{
-		Name:    m.name,
-		Payload: m.payload,
+		Name:    msg.name,
+		Payload: msg.payload,
 		Meta: &sendableMessageMeta{
-			Timestamp: m.meta.timestamp.UTC(),
+			Timestamp: msg.meta.timestamp.UTC(),
 		},
 	}
 

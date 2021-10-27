@@ -9,9 +9,9 @@ type Publisher struct {
 	bridge bridge
 }
 
-func (p *Publisher) Publish(m *Message) error {
-	m.meta.timestamp = time.Now()
-	return p.bridge.take(m)
+func (p *Publisher) Publish(msg *Message) error {
+	msg.meta.timestamp = time.Now()
+	return p.bridge.take(msg)
 }
 
 func (p *Publisher) Drain() {

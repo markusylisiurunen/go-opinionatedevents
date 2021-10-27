@@ -2,19 +2,19 @@ package opinionatedevents
 
 import "fmt"
 
-type testDestinationHandler = func(message *Message) error
+type testDestinationHandler = func(msg *Message) error
 
 type testDestination struct {
 	handlers []testDestinationHandler
 }
 
-func (d *testDestination) deliver(message *Message) error {
+func (d *testDestination) deliver(msg *Message) error {
 	handler, err := d.nextHandler()
 	if err != nil {
 		return err
 	}
 
-	return handler(message)
+	return handler(msg)
 }
 
 func (d *testDestination) nextHandler() (testDestinationHandler, error) {

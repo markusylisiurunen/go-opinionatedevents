@@ -17,9 +17,9 @@ type asyncBridge struct {
 	deliveryConfig *asyncBridgeDeliveryConfig
 }
 
-func (b *asyncBridge) take(message *Message) error {
+func (b *asyncBridge) take(msg *Message) error {
 	b.wg.Add(1)
-	go b.deliver(message)
+	go b.deliver(msg)
 	return nil
 }
 
@@ -27,7 +27,7 @@ func (b *asyncBridge) drain() {
 	b.wg.Wait()
 }
 
-func (b *asyncBridge) deliver(message *Message) {
+func (b *asyncBridge) deliver(msg *Message) {
 	defer b.wg.Done()
 
 	destinations := b.destinations
@@ -40,7 +40,7 @@ func (b *asyncBridge) deliver(message *Message) {
 		deliveredDestinations := []int{}
 
 		for i, destination := range destinations {
-			if err := destination.deliver(message); err != nil {
+			if err := destination.deliver(msg); err != nil {
 				// TODO: how to log errors?
 				fmt.Printf("%s\n", err.Error())
 				continue

@@ -1,6 +1,6 @@
 package opinionatedevents
 
 type bridge interface {
-	take(m *Message) error
+	take(msg *Message) error
 	drain()
 }
