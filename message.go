@@ -3,9 +3,12 @@ package opinionatedevents
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type sendableMessageMeta struct {
+	UUID      string    `json:"uuid"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -24,6 +27,7 @@ type Message struct {
 	payload []byte
 
 	meta struct {
+		uuid      string
 		timestamp time.Time
 	}
 }
@@ -45,6 +49,7 @@ func (msg *Message) MarshalJSON() ([]byte, error) {
 		Payload: msg.payload,
 
 		Meta: sendableMessageMeta{
+			UUID:      msg.meta.uuid,
 			Timestamp: msg.meta.timestamp.UTC(),
 		},
 	}
@@ -56,6 +61,13 @@ func NewMessage(name string) *Message {
 	return &Message{
 		name:    name,
 		payload: nil,
-		meta:    struct{ timestamp time.Time }{},
+
+		meta: struct {
+			uuid      string
+			timestamp time.Time
+		}{
+			uuid:      uuid.New().String(),
+			timestamp: time.Now(),
+		},
 	}
 }
