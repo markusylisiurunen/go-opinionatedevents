@@ -1,8 +1,6 @@
 package opinionatedevents
 
 import (
-	"fmt"
-	"sync"
 	"time"
 )
 
@@ -13,23 +11,16 @@ type asyncBridgeDeliveryConfig struct {
 
 type asyncBridge struct {
 	destinations   []destination
-	wg             *sync.WaitGroup
 	deliveryConfig *asyncBridgeDeliveryConfig
 }
 
-func (b *asyncBridge) take(msg *Message) error {
-	b.wg.Add(1)
-	go b.deliver(msg)
-	return nil
+func (b *asyncBridge) take(msg *Message) *envelope {
+	env := newEnvelope(msg)
+	go b.deliver(env)
+	return env
 }
 
-func (b *asyncBridge) drain() {
-	b.wg.Wait()
-}
-
-func (b *asyncBridge) deliver(msg *Message) {
-	defer b.wg.Done()
-
+func (b *asyncBridge) deliver(envelope *envelope) {
 	destinations := b.destinations
 	attemptsLeft := b.deliveryConfig.maxAttempts
 
@@ -40,13 +31,9 @@ func (b *asyncBridge) deliver(msg *Message) {
 		deliveredDestinations := []int{}
 
 		for i, destination := range destinations {
-			if err := destination.deliver(msg); err != nil {
-				// TODO: how to log errors?
-				fmt.Printf("%s\n", err.Error())
-				continue
+			if err := destination.deliver(envelope.message); err == nil {
+				deliveredDestinations = append(deliveredDestinations, i)
 			}
-
-			deliveredDestinations = append(deliveredDestinations, i)
 		}
 
 		// remove the delivered destinations from the pending list
@@ -72,12 +59,20 @@ func (b *asyncBridge) deliver(msg *Message) {
 		destinations = tmp
 
 		if len(destinations) == 0 {
+			envelope.closeWith(
+				newDeliveryEvent(deliveryEventSuccessName),
+			)
+
 			break
 		}
 
 		if attemptsLeft > 0 {
 			waitFor := time.Duration(b.deliveryConfig.waitBetween)
 			time.Sleep(waitFor * time.Millisecond)
+		} else {
+			envelope.closeWith(
+				newDeliveryEvent(deliveryEventFailureName),
+			)
 		}
 	}
 }
@@ -89,7 +84,6 @@ func newAsyncBridge(
 ) *asyncBridge {
 	bridge := &asyncBridge{
 		destinations: destinations,
-		wg:           &sync.WaitGroup{},
 
 		deliveryConfig: &asyncBridgeDeliveryConfig{
 			maxAttempts: maxDeliveryAttempts,

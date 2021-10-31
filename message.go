@@ -20,6 +20,7 @@ type sendableMessage struct {
 
 type Payloadable interface {
 	MarshalPayload() ([]byte, error)
+	UnmarshalPayload([]byte) error
 }
 
 type Message struct {
@@ -30,6 +31,18 @@ type Message struct {
 		uuid      string
 		timestamp time.Time
 	}
+}
+
+func (msg *Message) UUID() string {
+	return msg.meta.uuid
+}
+
+func (msg *Message) Timestamp() time.Time {
+	return msg.meta.timestamp
+}
+
+func (msg *Message) Payload(payload Payloadable) error {
+	return payload.UnmarshalPayload(msg.payload)
 }
 
 func (msg *Message) SetPayload(payload Payloadable) error {
@@ -66,8 +79,7 @@ func NewMessage(name string) *Message {
 			uuid      string
 			timestamp time.Time
 		}{
-			uuid:      uuid.New().String(),
-			timestamp: time.Now(),
+			uuid: uuid.New().String(),
 		},
 	}
 }

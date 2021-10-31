@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestAsyncBridge(t *testing.T) {
@@ -20,16 +22,10 @@ func TestAsyncBridge(t *testing.T) {
 			return nil
 		})
 
-		if err := bridge.take(NewMessage("test")); err != nil {
-			t.Error(err.Error())
-			return
-		}
+		envelope := bridge.take(NewMessage("test"))
+		assert.NoError(t, waitForSuccessEnvelope(envelope))
 
-		bridge.drain()
-
-		if attempts != 1 {
-			t.Errorf("expected destination call count to be 1 but was %d", attempts)
-		}
+		assert.Equal(t, 1, attempts)
 	})
 
 	t.Run("retries delivering a failed message", func(t *testing.T) {
@@ -54,16 +50,10 @@ func TestAsyncBridge(t *testing.T) {
 			})
 		}
 
-		if err := bridge.take(NewMessage("test")); err != nil {
-			t.Error(err.Error())
-			return
-		}
+		envelope := bridge.take(NewMessage("test"))
+		assert.NoError(t, waitForSuccessEnvelope(envelope))
 
-		bridge.drain()
-
-		if attempts != 2 {
-			t.Errorf("expected destination call count to be 2 but was %d", attempts)
-		}
+		assert.Equal(t, 2, attempts)
 	})
 
 	t.Run("retries delivering a failed message only for failed destinations", func(t *testing.T) {
@@ -93,20 +83,11 @@ func TestAsyncBridge(t *testing.T) {
 			}
 		}
 
-		if err := bridge.take(NewMessage("test")); err != nil {
-			t.Error(err.Error())
-			return
-		}
+		envelope := bridge.take(NewMessage("test"))
+		assert.Error(t, waitForSuccessEnvelope(envelope))
 
-		bridge.drain()
-
-		if attempts[0] != 3 {
-			t.Errorf("expected destination 1 call count to be 3 but was %d", attempts[0])
-		}
-
-		if attempts[1] != 1 {
-			t.Errorf("expected destination 2 call count to be 1 but was %d", attempts[1])
-		}
+		assert.Equal(t, 3, attempts[0])
+		assert.Equal(t, 1, attempts[1])
 	})
 
 	t.Run("gives up delivering a message after max attempts", func(t *testing.T) {
@@ -125,44 +106,29 @@ func TestAsyncBridge(t *testing.T) {
 			})
 		}
 
-		if err := bridge.take(NewMessage("test")); err != nil {
-			t.Error(err.Error())
-			return
-		}
+		envelope := bridge.take(NewMessage("test"))
+		assert.Error(t, waitForSuccessEnvelope(envelope))
 
-		bridge.drain()
-
-		if attempts != bridge.deliveryConfig.maxAttempts {
-			t.Errorf("expected destination call count to be %d but was %d",
-				bridge.deliveryConfig.maxAttempts,
-				attempts,
-			)
-		}
+		assert.Equal(t, bridge.deliveryConfig.maxAttempts, attempts)
 	})
 
 	t.Run("drain waits for slow deliveries", func(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newAsyncBridge(3, 500, destination)
 
-		waitFor := 500
+		waitFor := 100
 
 		destination.pushHandler(func(_ *Message) error {
 			time.Sleep(time.Duration(waitFor) * time.Millisecond)
 			return nil
 		})
 
-		if err := bridge.take(NewMessage("test")); err != nil {
-			t.Error(err.Error())
-			return
-		}
+		envelope := bridge.take(NewMessage("test"))
 
 		start := time.Now()
-		bridge.drain()
-
+		assert.NoError(t, waitForSuccessEnvelope(envelope))
 		duration := time.Since(start).Milliseconds()
 
-		if duration < int64(waitFor) {
-			t.Errorf("expected duration to be at least %d ms, it was %d ms", waitFor, duration)
-		}
+		assert.Greater(t, duration, int64(waitFor))
 	})
 }

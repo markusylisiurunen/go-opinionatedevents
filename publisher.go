@@ -2,24 +2,59 @@ package opinionatedevents
 
 import (
 	"errors"
+	"reflect"
+	"sync"
 	"time"
 )
 
 type Publisher struct {
-	bridge bridge
+	bridge                    bridge
+	inFlightWaitingGroup      *sync.WaitGroup
+	onDeliveryFailureHandlers []func(msg *Message)
+}
+
+func (p *Publisher) OnDeliveryFailure(handler func(msg *Message)) func() {
+	p.onDeliveryFailureHandlers = append(p.onDeliveryFailureHandlers, handler)
+
+	return func() {
+		for i := 0; i < len(p.onDeliveryFailureHandlers); i += 1 {
+			if reflect.ValueOf(p.onDeliveryFailureHandlers[i]).Pointer() == reflect.ValueOf(handler).Pointer() {
+				p.onDeliveryFailureHandlers = append(p.onDeliveryFailureHandlers[:i], p.onDeliveryFailureHandlers[i+1:]...)
+			}
+		}
+	}
 }
 
 func (p *Publisher) Publish(msg *Message) error {
 	msg.meta.timestamp = time.Now()
-	return p.bridge.take(msg)
+
+	p.inFlightWaitingGroup.Add(1)
+	envelope := p.bridge.take(msg)
+
+	go func() {
+		select {
+		case <-envelope.onSuccess():
+			p.inFlightWaitingGroup.Done()
+		case <-envelope.onFailure():
+			p.inFlightWaitingGroup.Done()
+
+			for _, failureHandler := range p.onDeliveryFailureHandlers {
+				failureHandler(msg)
+			}
+		}
+	}()
+
+	return nil
 }
 
 func (p *Publisher) Drain() {
-	p.bridge.drain()
+	p.inFlightWaitingGroup.Wait()
 }
 
 func NewPublisher(opts ...PublisherOption) (*Publisher, error) {
-	p := &Publisher{}
+	p := &Publisher{
+		onDeliveryFailureHandlers: []func(msg *Message){},
+	}
 
 	for _, modify := range opts {
 		if err := modify(p); err != nil {

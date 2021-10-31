@@ -1,9 +1,11 @@
 package opinionatedevents
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSyncBridge(t *testing.T) {
@@ -11,17 +13,15 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
-		if err := bridge.take(NewMessage("test")); err == nil {
-			t.Errorf("expected error to not be nil")
-		}
+		envelope := bridge.take(NewMessage("test"))
+		assert.Error(t, waitForSuccessEnvelope(envelope))
 
 		destination.pushHandler(func(_ *Message) error {
 			return nil
 		})
 
-		if err := bridge.take(NewMessage("test")); err != nil {
-			t.Errorf("expected error to be nil")
-		}
+		envelope = bridge.take(NewMessage("test"))
+		assert.NoError(t, waitForSuccessEnvelope(envelope))
 	})
 
 	t.Run("synchronously handles events", func(t *testing.T) {
@@ -40,9 +40,8 @@ func TestSyncBridge(t *testing.T) {
 			})
 
 			// try to deliver the next message
-			if err := bridge.take(NewMessage("test")); err != nil {
-				t.Fatal(err)
-			}
+			envelope := bridge.take(NewMessage("test"))
+			assert.NoError(t, waitForSuccessEnvelope(envelope))
 
 			expected := i + 1
 
@@ -69,9 +68,8 @@ func TestSyncBridge(t *testing.T) {
 
 		startAt := time.Now()
 
-		if err := bridge.take(NewMessage("test")); err != nil {
-			t.Fatal(err)
-		}
+		envelope := bridge.take(NewMessage("test"))
+		assert.NoError(t, waitForSuccessEnvelope(envelope))
 
 		overAt := time.Now()
 
@@ -84,14 +82,55 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
-		expectedErr := fmt.Errorf("something went wrong")
-
 		destination.pushHandler(func(_ *Message) error {
-			return expectedErr
+			return errors.New("failed")
 		})
 
-		if err := bridge.take(NewMessage("test")); err != expectedErr {
-			t.Errorf("expected error to not be nil")
+		envelope := bridge.take(NewMessage("test"))
+		assert.Error(t, waitForSuccessEnvelope(envelope))
+	})
+
+	t.Run("returned delivery envelope resolves with success", func(t *testing.T) {
+		destination := newTestDestination()
+		bridge := newSyncBridge(destination)
+
+		destination.pushHandler(func(_ *Message) error {
+			return nil
+		})
+
+		envelope := bridge.take(NewMessage("test"))
+
+		var success bool
+
+		select {
+		case <-envelope.onSuccess():
+			success = true
+		case <-envelope.onFailure():
+			success = false
 		}
+
+		assert.True(t, success)
+	})
+
+	t.Run("returned delivery envelope resolves with failure", func(t *testing.T) {
+		destination := newTestDestination()
+		bridge := newSyncBridge(destination)
+
+		destination.pushHandler(func(_ *Message) error {
+			return errors.New("failed to deliver")
+		})
+
+		envelope := bridge.take(NewMessage("test"))
+
+		var success bool
+
+		select {
+		case <-envelope.onSuccess():
+			success = true
+		case <-envelope.onFailure():
+			success = false
+		}
+
+		assert.False(t, success)
 	})
 }

@@ -1,6 +1,10 @@
 package opinionatedevents
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
 type testDestinationHandler = func(msg *Message) error
 
@@ -35,5 +39,16 @@ func (d *testDestination) pushHandler(handler testDestinationHandler) {
 func newTestDestination() *testDestination {
 	return &testDestination{
 		handlers: []testDestinationHandler{},
+	}
+}
+
+func waitForSuccessEnvelope(envelope *envelope) error {
+	select {
+	case <-envelope.onSuccess():
+		return nil
+	case <-envelope.onFailure():
+		return errors.New("failed")
+	case <-time.After(1 * time.Second):
+		return errors.New("timeout reached")
 	}
 }

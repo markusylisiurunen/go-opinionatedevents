@@ -129,6 +129,10 @@ func (p *testHTTPClientPayload) MarshalPayload() ([]byte, error) {
 	return json.Marshal(payload)
 }
 
+func (p *testHTTPClientPayload) UnmarshalPayload(data []byte) error {
+	return nil
+}
+
 type testHttpClient struct {
 	handlers []func(req *http.Request) (*http.Response, error)
 }
