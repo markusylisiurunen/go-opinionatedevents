@@ -1,5 +1,7 @@
 package opinionatedevents
 
+import "sync"
+
 const (
 	deliveryEventSuccessName string = "success"
 	deliveryEventFailureName string = "failure"
@@ -16,17 +18,20 @@ func newDeliveryEvent(name string) *deliveryEvent {
 type envelope struct {
 	message *Message
 
-	events  chan *deliveryEvent
-	proxies []chan *deliveryEvent
+	events chan *deliveryEvent
 
-	closedWith *deliveryEvent
+	proxies     []chan *deliveryEvent
+	proxiesLock sync.Mutex
+
+	closedWith     *deliveryEvent
+	closedWithLock sync.Mutex
 }
 
 func (e *envelope) onEvent(name string) chan struct{} {
 	in := make(chan *deliveryEvent)
 	out := make(chan struct{})
 
-	e.proxies = append(e.proxies, in)
+	e.addProxy(in)
 
 	go func() {
 		for event := range in {
@@ -44,10 +49,10 @@ func (e *envelope) onEvent(name string) chan struct{} {
 }
 
 func (e *envelope) onSuccess() chan struct{} {
-	if e.closedWith != nil {
+	if e.isClosed() {
 		out := make(chan struct{}, 1)
 
-		if e.closedWith.name == deliveryEventSuccessName {
+		if e.isClosedWith(deliveryEventSuccessName) {
 			out <- struct{}{}
 		}
 
@@ -58,10 +63,10 @@ func (e *envelope) onSuccess() chan struct{} {
 }
 
 func (e *envelope) onFailure() chan struct{} {
-	if e.closedWith != nil {
+	if e.isClosed() {
 		out := make(chan struct{}, 1)
 
-		if e.closedWith.name == deliveryEventFailureName {
+		if e.isClosedWith(deliveryEventFailureName) {
 			out <- struct{}{}
 		}
 
@@ -72,16 +77,62 @@ func (e *envelope) onFailure() chan struct{} {
 }
 
 func (e *envelope) closeWith(event *deliveryEvent) {
-	if e.closedWith != nil {
+	if e.isClosed() {
 		return
 	}
 
-	e.closedWith = event
+	e.setClosedWith(event)
 
 	go func() {
 		e.events <- event
 		close(e.events)
 	}()
+}
+
+func (e *envelope) doWithClosedWith(do func() interface{}) interface{} {
+	e.closedWithLock.Lock()
+	defer e.closedWithLock.Unlock()
+
+	return do()
+}
+
+func (e *envelope) isClosed() bool {
+	return e.doWithClosedWith(func() interface{} {
+		return e.closedWith != nil
+	}).(bool)
+}
+
+func (e *envelope) isClosedWith(name string) bool {
+	return e.doWithClosedWith(func() interface{} {
+		return e.closedWith != nil && e.closedWith.name == name
+	}).(bool)
+}
+
+func (e *envelope) setClosedWith(event *deliveryEvent) {
+	e.doWithClosedWith(func() interface{} {
+		e.closedWith = event
+		return nil
+	})
+}
+
+func (e *envelope) doWithProxies(do func() interface{}) interface{} {
+	e.proxiesLock.Lock()
+	defer e.proxiesLock.Unlock()
+
+	return do()
+}
+
+func (e *envelope) getProxies() []chan *deliveryEvent {
+	return e.doWithProxies(func() interface{} {
+		return e.proxies
+	}).([]chan *deliveryEvent)
+}
+
+func (e *envelope) addProxy(proxy chan *deliveryEvent) {
+	e.doWithProxies(func() interface{} {
+		e.proxies = append(e.proxies, proxy)
+		return nil
+	})
 }
 
 func newEnvelope(msg *Message) *envelope {
@@ -96,12 +147,12 @@ func newEnvelope(msg *Message) *envelope {
 
 	go func() {
 		for event := range env.events {
-			for _, proxy := range env.proxies {
+			for _, proxy := range env.getProxies() {
 				proxy <- event
 			}
 		}
 
-		for _, proxy := range env.proxies {
+		for _, proxy := range env.getProxies() {
 			close(proxy)
 		}
 	}()

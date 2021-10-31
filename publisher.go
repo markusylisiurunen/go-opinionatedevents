@@ -9,7 +9,7 @@ import (
 
 type Publisher struct {
 	bridge                    bridge
-	inFlightWaitingGroup      *sync.WaitGroup
+	inFlightWaitingGroup      sync.WaitGroup
 	onDeliveryFailureHandlers []func(msg *Message)
 }
 
