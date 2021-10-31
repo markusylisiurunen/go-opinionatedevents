@@ -123,12 +123,13 @@ func TestAsyncBridge(t *testing.T) {
 			return nil
 		})
 
-		envelope := bridge.take(NewMessage("test"))
-
 		start := time.Now()
+
+		envelope := bridge.take(NewMessage("test"))
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
+
 		duration := time.Since(start).Milliseconds()
 
-		assert.Greater(t, duration, int64(waitFor))
+		assert.GreaterOrEqual(t, duration, int64(waitFor))
 	})
 }
