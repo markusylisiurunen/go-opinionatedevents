@@ -12,7 +12,7 @@ type testDestination struct {
 	handlers []testDestinationHandler
 }
 
-func (d *testDestination) deliver(msg *Message) error {
+func (d *testDestination) Deliver(msg *Message) error {
 	handler, err := d.nextHandler()
 	if err != nil {
 		return err
