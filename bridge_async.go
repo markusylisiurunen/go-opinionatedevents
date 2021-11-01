@@ -10,7 +10,7 @@ type asyncBridgeDeliveryConfig struct {
 }
 
 type asyncBridge struct {
-	destinations   []destination
+	destinations   []Destination
 	deliveryConfig *asyncBridgeDeliveryConfig
 }
 
@@ -31,13 +31,13 @@ func (b *asyncBridge) deliver(envelope *envelope) {
 		deliveredDestinations := []int{}
 
 		for i, destination := range destinations {
-			if err := destination.deliver(envelope.message); err == nil {
+			if err := destination.Deliver(envelope.message); err == nil {
 				deliveredDestinations = append(deliveredDestinations, i)
 			}
 		}
 
 		// remove the delivered destinations from the pending list
-		tmp := []destination{}
+		tmp := []Destination{}
 
 		for i, destination := range destinations {
 			// check if this destination was successful
@@ -80,7 +80,7 @@ func (b *asyncBridge) deliver(envelope *envelope) {
 func newAsyncBridge(
 	maxDeliveryAttempts int,
 	waitBetweenAttempts int,
-	destinations ...destination,
+	destinations ...Destination,
 ) *asyncBridge {
 	bridge := &asyncBridge{
 		destinations: destinations,

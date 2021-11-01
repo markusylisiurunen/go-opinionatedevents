@@ -19,7 +19,7 @@ func TestHTTPDestination(t *testing.T) {
 
 		destination.client = client
 
-		err := destination.deliver(NewMessage("test"))
+		err := destination.Deliver(NewMessage("test"))
 		assert.Error(t, err)
 	})
 
@@ -39,7 +39,7 @@ func TestHTTPDestination(t *testing.T) {
 			return &http.Response{StatusCode: 200}, nil
 		})
 
-		err := destination.deliver(NewMessage("test"))
+		err := destination.Deliver(NewMessage("test"))
 		assert.NoError(t, err)
 
 		assert.Equal(t, 1, i)
@@ -61,7 +61,7 @@ func TestHTTPDestination(t *testing.T) {
 			return &http.Response{StatusCode: 404}, nil
 		})
 
-		err := destination.deliver(NewMessage("test"))
+		err := destination.Deliver(NewMessage("test"))
 		assert.Error(t, err)
 
 		assert.Equal(t, 1, i)
@@ -117,7 +117,7 @@ func TestHTTPDestination(t *testing.T) {
 			return &http.Response{StatusCode: 200}, nil
 		})
 
-		deliveryErr := destination.deliver(msg)
+		deliveryErr := destination.Deliver(msg)
 		assert.NoError(t, deliveryErr)
 	})
 }

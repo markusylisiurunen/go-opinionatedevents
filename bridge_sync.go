@@ -1,7 +1,7 @@
 package opinionatedevents
 
 type syncBridge struct {
-	destinations []destination
+	destinations []Destination
 }
 
 func (b *syncBridge) take(msg *Message) *envelope {
@@ -10,7 +10,7 @@ func (b *syncBridge) take(msg *Message) *envelope {
 	var possibleErr error = nil
 
 	for _, d := range b.destinations {
-		if err := d.deliver(msg); err != nil {
+		if err := d.Deliver(msg); err != nil {
 			possibleErr = err
 		}
 	}
@@ -30,7 +30,7 @@ func (b *syncBridge) take(msg *Message) *envelope {
 	return env
 }
 
-func newSyncBridge(destinations ...destination) *syncBridge {
+func newSyncBridge(destinations ...Destination) *syncBridge {
 	return &syncBridge{
 		destinations: destinations,
 	}

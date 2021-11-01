@@ -1,5 +1,5 @@
 package opinionatedevents
 
-type destination interface {
-	deliver(msg *Message) error
+type Destination interface {
+	Deliver(msg *Message) error
 }

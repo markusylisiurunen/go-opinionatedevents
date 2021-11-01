@@ -23,7 +23,7 @@ func (d *PubSubDestination) getTopic(msg *Message) string {
 	return d.topicMapper(msg)
 }
 
-func (d *PubSubDestination) deliver(msg *Message) error {
+func (d *PubSubDestination) Deliver(msg *Message) error {
 	topic := d.getTopic(msg)
 
 	if _, ok := d.topics[topic]; !ok {

@@ -71,7 +71,7 @@ func NewPublisher(opts ...PublisherOption) (*Publisher, error) {
 
 type PublisherOption func(p *Publisher) error
 
-func WithSyncBridge(destinations ...destination) PublisherOption {
+func WithSyncBridge(destinations ...Destination) PublisherOption {
 	return func(p *Publisher) error {
 		if p.bridge != nil {
 			return errors.New("cannot initialise bridge more than once")
@@ -86,7 +86,7 @@ func WithSyncBridge(destinations ...destination) PublisherOption {
 func WithAsyncBridge(
 	maxAttempts int,
 	waitBetweenAttempts int,
-	destinations ...destination,
+	destinations ...Destination,
 ) PublisherOption {
 	return func(p *Publisher) error {
 		if p.bridge != nil {

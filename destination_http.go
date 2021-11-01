@@ -16,7 +16,7 @@ type HttpDestination struct {
 	client   httpClient
 }
 
-func (d *HttpDestination) deliver(msg *Message) error {
+func (d *HttpDestination) Deliver(msg *Message) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return err
