@@ -4,18 +4,19 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
 type sendableMessageMeta struct {
-	UUID      string    `json:"uuid"`
-	Timestamp time.Time `json:"timestamp"`
+	UUID      string    `json:"uuid" validate:"required"`
+	Timestamp time.Time `json:"timestamp" validate:"required"`
 }
 
 type sendableMessage struct {
-	Name    string              `json:"name"`
+	Name    string              `json:"name" validate:"required"`
 	Payload []byte              `json:"payload"`
-	Meta    sendableMessageMeta `json:"meta"`
+	Meta    sendableMessageMeta `json:"meta" validate:"required"`
 }
 
 type Payloadable interface {
@@ -88,6 +89,10 @@ func ParseMessage(data []byte) (*Message, error) {
 	sendable := &sendableMessage{}
 
 	if err := json.Unmarshal(data, sendable); err != nil {
+		return nil, err
+	}
+
+	if err := validator.New().Struct(sendable); err != nil {
 		return nil, err
 	}
 
