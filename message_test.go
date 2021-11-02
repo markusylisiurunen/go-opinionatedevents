@@ -55,8 +55,6 @@ func TestMessageSerialization(t *testing.T) {
 			{value: `{"name":"test","meta":{"timestamp":"2021-10-10T12:32:00Z"},"payload":""}`, valid: false},
 			// missing timestamp
 			{value: `{"name":"test","meta":{"uuid":"12345"},"payload":""}`, valid: false},
-			// missing payload
-			{value: `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"}}`, valid: false},
 		}
 
 		for i, message := range messages {
