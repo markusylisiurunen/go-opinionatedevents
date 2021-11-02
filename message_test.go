@@ -13,7 +13,9 @@ func TestMessageSerialization(t *testing.T) {
 	t.Run("marshals and unmarshals correctly", func(t *testing.T) {
 		message := NewMessage("test")
 
-		message.SetPayload(&testMessagePayload{Value: "42"})
+		err := message.SetPayload(&testMessagePayload{Value: "42"})
+		assert.NoError(t, err)
+
 		message.meta.timestamp = time.Now()
 
 		serialized, err := message.MarshalJSON()
