@@ -83,3 +83,26 @@ func NewMessage(name string) *Message {
 		},
 	}
 }
+
+func ParseMessage(data []byte) (*Message, error) {
+	sendable := &sendableMessage{}
+
+	if err := json.Unmarshal(data, sendable); err != nil {
+		return nil, err
+	}
+
+	message := &Message{
+		name:    sendable.Name,
+		payload: sendable.Payload,
+
+		meta: struct {
+			uuid      string
+			timestamp time.Time
+		}{
+			uuid:      sendable.Meta.UUID,
+			timestamp: sendable.Meta.Timestamp,
+		},
+	}
+
+	return message, nil
+}
