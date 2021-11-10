@@ -29,6 +29,16 @@ func TestReceiver(t *testing.T) {
 			},
 		},
 		{
+			name:               "no handler registered",
+			messageData:        `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
+			logAfterReceive:    []string{},
+			errorsAfterReceive: false,
+
+			onMessageHandlers: map[string]OnMessageHandler{
+				"unknown": makeOnMessageHandler("unknown", &log, false),
+			},
+		},
+		{
 			name:               "an invalid message",
 			messageData:        `{"name":"test","meta":{"timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
 			logAfterReceive:    []string{},
