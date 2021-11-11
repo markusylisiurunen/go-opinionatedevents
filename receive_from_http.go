@@ -5,10 +5,15 @@ import (
 	"net/http"
 )
 
-type ReceiveFromHttp func(resp http.ResponseWriter, req *http.Request)
+type ReceiveFromHTTP func(resp http.ResponseWriter, req *http.Request)
 
-func MakeReceiveFromHttp(receiver *Receiver) ReceiveFromHttp {
+func MakeReceiveFromHTTP(receiver *Receiver) ReceiveFromHTTP {
 	return func(resp http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPost {
+			resp.WriteHeader(404)
+			return
+		}
+
 		body, err := ioutil.ReadAll(req.Body)
 		if err != nil {
 			resp.WriteHeader(500)
@@ -17,7 +22,6 @@ func MakeReceiveFromHttp(receiver *Receiver) ReceiveFromHttp {
 
 		if err := receiver.Receive(body); err != nil {
 			resp.WriteHeader(500)
-			return
 		}
 	}
 }
