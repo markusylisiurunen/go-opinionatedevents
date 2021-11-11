@@ -14,8 +14,8 @@ import (
 
 func TestHTTPDestination(t *testing.T) {
 	t.Run("fails if no HTTP handlers added", func(t *testing.T) {
-		destination := NewHttpDestination("https://api.example.com/events")
-		client := &testHttpClient{}
+		destination := NewHTTPDestination("https://api.example.com/events")
+		client := &testHTTPClient{}
 
 		destination.client = client
 
@@ -24,8 +24,8 @@ func TestHTTPDestination(t *testing.T) {
 	})
 
 	t.Run("successfully delivers a message if endpoint responds with 2xx", func(t *testing.T) {
-		destination := NewHttpDestination("https://api.example.com/events")
-		client := &testHttpClient{}
+		destination := NewHTTPDestination("https://api.example.com/events")
+		client := &testHTTPClient{}
 
 		destination.client = client
 
@@ -46,8 +46,8 @@ func TestHTTPDestination(t *testing.T) {
 	})
 
 	t.Run("fails delivering a message if endpoint responds with non-2xx", func(t *testing.T) {
-		destination := NewHttpDestination("https://api.example.com/events")
-		client := &testHttpClient{}
+		destination := NewHTTPDestination("https://api.example.com/events")
+		client := &testHTTPClient{}
 
 		destination.client = client
 
@@ -68,8 +68,8 @@ func TestHTTPDestination(t *testing.T) {
 	})
 
 	t.Run("sends the message as JSON in the POST body", func(t *testing.T) {
-		destination := NewHttpDestination("https://api.example.com/events")
-		client := &testHttpClient{}
+		destination := NewHTTPDestination("https://api.example.com/events")
+		client := &testHTTPClient{}
 
 		destination.client = client
 
@@ -133,11 +133,11 @@ func (p *testHTTPClientPayload) UnmarshalPayload(data []byte) error {
 	return nil
 }
 
-type testHttpClient struct {
+type testHTTPClient struct {
 	handlers []func(req *http.Request) (*http.Response, error)
 }
 
-func (c *testHttpClient) Do(req *http.Request) (*http.Response, error) {
+func (c *testHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	if len(c.handlers) == 0 {
 		return nil, fmt.Errorf("no handlers left")
 	}
@@ -148,6 +148,6 @@ func (c *testHttpClient) Do(req *http.Request) (*http.Response, error) {
 	return handler(req)
 }
 
-func (c *testHttpClient) pushHandler(handler func(req *http.Request) (*http.Response, error)) {
+func (c *testHTTPClient) pushHandler(handler func(req *http.Request) (*http.Response, error)) {
 	c.handlers = append(c.handlers, handler)
 }

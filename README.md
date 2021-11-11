@@ -83,8 +83,8 @@ publish the actual messages to the event bus.
 ```go
 func GetLocalPublisher() *events.Publisher {
     // define the local destination(s) (i.e. the services you have running locally, including the current service)
-    destOne := events.NewHttpDestination("http://localhost:8080/_events/local")
-    destTwo := events.NewHttpDestination("http://localhost:8081/_events/local")
+    destOne := events.NewHTTPDestination("http://localhost:8080/_events/local")
+    destTwo := events.NewHTTPDestination("http://localhost:8081/_events/local")
 
     // initialise the publisher with an async bridge
     publisher, err := events.NewPublisher(
