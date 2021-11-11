@@ -11,12 +11,12 @@ type httpClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
-type HttpDestination struct {
+type HTTPDestination struct {
 	endpoint string
 	client   httpClient
 }
 
-func (d *HttpDestination) Deliver(msg *Message) error {
+func (d *HTTPDestination) Deliver(msg *Message) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -42,8 +42,8 @@ func (d *HttpDestination) Deliver(msg *Message) error {
 	return nil
 }
 
-func NewHttpDestination(endpoint string) *HttpDestination {
-	return &HttpDestination{
+func NewHTTPDestination(endpoint string) *HTTPDestination {
+	return &HTTPDestination{
 		endpoint: endpoint,
 		client:   http.DefaultClient,
 	}
