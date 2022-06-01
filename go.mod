@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	cloud.google.com/go/pubsub v1.21.0
-	github.com/go-playground/validator/v10 v10.10.1
+	github.com/go-playground/validator/v10 v10.11.0
 	github.com/google/uuid v1.3.0
 	github.com/stretchr/testify v1.7.1
 )
