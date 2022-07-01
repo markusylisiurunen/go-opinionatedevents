@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/pubsub v1.22.0
 	github.com/go-playground/validator/v10 v10.11.0
 	github.com/google/uuid v1.3.0
-	github.com/stretchr/testify v1.7.1
+	github.com/stretchr/testify v1.8.0
 )
 
 require (
@@ -34,5 +34,5 @@ require (
 	google.golang.org/genproto v0.0.0-20220523171625-347a074981d8 // indirect
 	google.golang.org/grpc v1.46.2 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
