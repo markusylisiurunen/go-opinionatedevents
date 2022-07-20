@@ -1,6 +1,7 @@
 package opinionatedevents
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,13 +14,17 @@ import (
 )
 
 func TestHTTPDestination(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("fails if no HTTP handlers added", func(t *testing.T) {
 		destination := NewHTTPDestination("https://api.example.com/events")
 		client := &testHTTPClient{}
 
 		destination.client = client
 
-		err := destination.Deliver(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+		err = destination.Deliver(ctx, msg)
 		assert.Error(t, err)
 	})
 
@@ -39,7 +44,9 @@ func TestHTTPDestination(t *testing.T) {
 			return &http.Response{StatusCode: 200}, nil
 		})
 
-		err := destination.Deliver(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+		err = destination.Deliver(ctx, msg)
 		assert.NoError(t, err)
 
 		assert.Equal(t, 1, i)
@@ -61,7 +68,9 @@ func TestHTTPDestination(t *testing.T) {
 			return &http.Response{StatusCode: 404}, nil
 		})
 
-		err := destination.Deliver(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+		err = destination.Deliver(ctx, msg)
 		assert.Error(t, err)
 
 		assert.Equal(t, 1, i)
@@ -73,10 +82,8 @@ func TestHTTPDestination(t *testing.T) {
 
 		destination.client = client
 
-		msg := NewMessage("test")
-
-		payloadErr := msg.SetPayload(&testHTTPClientPayload{})
-		assert.NoError(t, payloadErr)
+		msg, err := NewMessage("test.test", &testHTTPClientPayload{})
+		assert.NoError(t, err)
 
 		client.pushHandler(func(req *http.Request) (*http.Response, error) {
 			assert.Equal(t, "POST", req.Method)
@@ -101,7 +108,7 @@ func TestHTTPDestination(t *testing.T) {
 			assert.IsType(t, "", payload["payload"])
 			assert.IsType(t, "", meta["timestamp"])
 
-			assert.Equal(t, "test", payload["name"])
+			assert.Equal(t, "test.test", payload["name"])
 			assert.Equal(t, msg.meta.timestamp.Format(time.RFC3339Nano), meta["timestamp"])
 
 			payloadAsJson, err := base64.StdEncoding.DecodeString(payload["payload"].(string))
@@ -117,7 +124,7 @@ func TestHTTPDestination(t *testing.T) {
 			return &http.Response{StatusCode: 200}, nil
 		})
 
-		deliveryErr := destination.Deliver(msg)
+		deliveryErr := destination.Deliver(ctx, msg)
 		assert.NoError(t, deliveryErr)
 	})
 }

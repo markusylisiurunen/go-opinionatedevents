@@ -1,5 +1,7 @@
 package opinionatedevents
 
+import "context"
+
 type Destination interface {
-	Deliver(msg *Message) error
+	Deliver(ctx context.Context, msg *Message) error
 }

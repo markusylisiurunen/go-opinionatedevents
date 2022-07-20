@@ -1,6 +1,7 @@
 package opinionatedevents
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -32,7 +33,7 @@ func TestReceiver(t *testing.T) {
 			name:               "no handler registered",
 			messageData:        `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
 			logAfterReceive:    []string{},
-			errorsAfterReceive: false,
+			errorsAfterReceive: true,
 
 			onMessageHandlers: map[string]OnMessageHandler{
 				"unknown": makeOnMessageHandler("unknown", &log, false),
@@ -71,12 +72,12 @@ func TestReceiver(t *testing.T) {
 				assert.NoError(t, receiver.On(name, onMessageHandler))
 			}
 
-			receiveErr := receiver.Receive([]byte(tc.messageData))
+			result := receiver.Receive(context.Background(), []byte(tc.messageData))
 
 			if tc.errorsAfterReceive {
-				assert.Error(t, receiveErr)
+				assert.Error(t, result.error())
 			} else {
-				assert.NoError(t, receiveErr)
+				assert.NoError(t, result.error())
 			}
 
 			assert.Len(t, log, len(tc.logAfterReceive))
@@ -86,13 +87,13 @@ func TestReceiver(t *testing.T) {
 }
 
 func makeOnMessageHandler(name string, log *[]string, returnsErr bool) OnMessageHandler {
-	return func(_ *Message) error {
+	return func(_ context.Context, _ *Message) Result {
 		*log = append(*log, name)
 
 		if returnsErr {
-			return errors.New("failed")
+			return ErrorResult(errors.New("it failed"))
 		}
 
-		return nil
+		return SuccessResult()
 	}
 }

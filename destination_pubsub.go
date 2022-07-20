@@ -23,7 +23,7 @@ func (d *PubSubDestination) getTopic(msg *Message) string {
 	return d.topicMapper(msg)
 }
 
-func (d *PubSubDestination) Deliver(msg *Message) error {
+func (d *PubSubDestination) Deliver(ctx context.Context, msg *Message) error {
 	topic := d.getTopic(msg)
 
 	if _, ok := d.topics[topic]; !ok {
@@ -35,7 +35,6 @@ func (d *PubSubDestination) Deliver(msg *Message) error {
 		return err
 	}
 
-	ctx := context.Background()
 	res := d.topics[topic].Publish(ctx, &pubsub.Message{
 		Data: payload,
 	})

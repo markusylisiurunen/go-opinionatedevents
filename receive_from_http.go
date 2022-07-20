@@ -1,13 +1,12 @@
 package opinionatedevents
 
 import (
+	"context"
 	"io/ioutil"
 	"net/http"
 )
 
-type ReceiveFromHTTP func(resp http.ResponseWriter, req *http.Request)
-
-func MakeReceiveFromHTTP(receiver *Receiver) ReceiveFromHTTP {
+func MakeReceiveFromHTTP(_ context.Context, receiver *Receiver) http.HandlerFunc {
 	return func(resp http.ResponseWriter, req *http.Request) {
 		if req.Method != http.MethodPost {
 			resp.WriteHeader(404)
@@ -20,7 +19,8 @@ func MakeReceiveFromHTTP(receiver *Receiver) ReceiveFromHTTP {
 			return
 		}
 
-		if err := receiver.Receive(body); err != nil {
+		// TODO: handle the result properly (e.g., retry delay)
+		if result := receiver.Receive(req.Context(), body); result.error() != nil {
 			resp.WriteHeader(500)
 		}
 	}

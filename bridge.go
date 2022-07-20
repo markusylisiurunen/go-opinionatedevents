@@ -1,5 +1,7 @@
 package opinionatedevents
 
+import "context"
+
 type bridge interface {
-	take(msg *Message) *envelope
+	take(ctx context.Context, msg *Message) *envelope
 }

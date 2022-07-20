@@ -1,6 +1,7 @@
 package opinionatedevents
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -9,18 +10,26 @@ import (
 )
 
 func TestSyncBridge(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("fails if handler is not pushed", func(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
-		envelope := bridge.take(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+
+		envelope := bridge.take(ctx, msg)
 		assert.Error(t, waitForSuccessEnvelope(envelope))
 
-		destination.pushHandler(func(_ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ *Message) error {
 			return nil
 		})
 
-		envelope = bridge.take(NewMessage("test"))
+		msg, err = NewMessage("test.test", nil)
+		assert.NoError(t, err)
+
+		envelope = bridge.take(ctx, msg)
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
 	})
 
@@ -34,13 +43,16 @@ func TestSyncBridge(t *testing.T) {
 		handled := 0
 
 		for i := 0; i < countToHandle; i++ {
-			destination.pushHandler(func(_ *Message) error {
+			destination.pushHandler(func(_ context.Context, _ *Message) error {
 				handled += 1
 				return nil
 			})
 
 			// try to deliver the next message
-			envelope := bridge.take(NewMessage("test"))
+			msg, err := NewMessage("test.test", nil)
+			assert.NoError(t, err)
+
+			envelope := bridge.take(ctx, msg)
 			assert.NoError(t, waitForSuccessEnvelope(envelope))
 
 			expected := i + 1
@@ -61,14 +73,17 @@ func TestSyncBridge(t *testing.T) {
 
 		waitFor := 250
 
-		destination.pushHandler(func(_ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ *Message) error {
 			time.Sleep(time.Duration(waitFor) * time.Millisecond)
 			return nil
 		})
 
 		startAt := time.Now()
 
-		envelope := bridge.take(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+
+		envelope := bridge.take(ctx, msg)
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
 
 		overAt := time.Now()
@@ -82,11 +97,14 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
-		destination.pushHandler(func(_ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ *Message) error {
 			return errors.New("failed")
 		})
 
-		envelope := bridge.take(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+
+		envelope := bridge.take(ctx, msg)
 		assert.Error(t, waitForSuccessEnvelope(envelope))
 	})
 
@@ -94,11 +112,14 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
-		destination.pushHandler(func(_ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ *Message) error {
 			return nil
 		})
 
-		envelope := bridge.take(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+
+		envelope := bridge.take(ctx, msg)
 
 		var success bool
 
@@ -116,11 +137,14 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 
-		destination.pushHandler(func(_ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ *Message) error {
 			return errors.New("failed to deliver")
 		})
 
-		envelope := bridge.take(NewMessage("test"))
+		msg, err := NewMessage("test.test", nil)
+		assert.NoError(t, err)
+
+		envelope := bridge.take(ctx, msg)
 
 		var success bool
 
