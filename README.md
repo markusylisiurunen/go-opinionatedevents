@@ -4,7 +4,7 @@
 
 # Opinionated Events
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/markusylisiurunen/go-opinionated-events.svg)](https://pkg.go.dev/github.com/markusylisiurunen/go-opinionated-events)
+[![Go Reference](https://pkg.go.dev/badge/github.com/markusylisiurunen/go-opinionatedevents.svg)](https://pkg.go.dev/github.com/markusylisiurunen/go-opinionatedevents)
 
 **Table of Contents**
 
@@ -14,12 +14,13 @@
 4. [Quickstart](#quickstart)
    1. [Local](#local)
    2. [Cloud Pub/Sub](#cloud-pubsub)
-   3. [Custom](#custom)
+   3. [Postgres](#postgres)
+   4. [Custom](#custom)
 
 ## Install
 
 ```sh
-go get github.com/markusylisiurunen/go-opinionated-events
+go get github.com/markusylisiurunen/go-opinionatedevents
 ```
 
 ## The problem
@@ -88,7 +89,7 @@ func GetLocalPublisher() *events.Publisher {
 
     // initialise the publisher with an async bridge
     publisher, err := events.NewPublisher(
-        events.WithAsyncBridge(10, 200, destOne, destTwo),
+        events.PublisherWithAsyncBridge(10, 200, destOne, destTwo),
     )
     if err != nil {
         panic(err)
@@ -119,13 +120,122 @@ func GetCloudPubSubPublisher() *events.Publisher {
 
     // initialise the publisher with an async bridge
     publisher, err := events.NewPublisher(
-        events.WithAsyncBridge(10, 200, destOne, destTwo),
+        events.PublisherWithAsyncBridge(10, 200, destOne, destTwo),
     )
     if err != nil {
         panic(err)
     }
 
     return publisher
+}
+```
+
+### Postgres
+
+For PostgreSQL, there is a little bit of setup that needs to happen for it to work. You need to
+create a table to your database for the messages.
+
+```sql
+CREATE TABLE events (
+    event_id         SERIAL PRIMARY KEY,
+    event_timestamp  TIMESTAMP WITH TIME ZONE NOT NULL,
+    event_deliver_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    event_status     TEXT NOT NULL,
+    event_topic      TEXT NOT NULL,
+    event_queue      TEXT NOT NULL,
+    event_uuid       TEXT NOT NULL,
+    event_name       TEXT NOT NULL,
+    event_data       JSON NOT NULL,
+
+    UNIQUE (queue, uuid),
+
+    CHECK (status IN ('pending', 'processed', 'dropped'))
+);
+
+-- index for making ordered queries for a certain set of queues with a `pending` status
+CREATE INDEX events_status_queue_timestamp_idx
+ON events (event_status, event_queue, event_timestamp);
+
+-- index for making updates to a specific message
+CREATE INDEX events_uuid_queue_idx
+ON events (event_uuid, event_queue);
+
+CREATE FUNCTION notify_of_new_events() RETURNS TRIGGER AS $$
+DECLARE
+    notification JSON;
+BEGIN
+    notification = json_build_object(
+        'topic', NEW .topic,
+        'queue', NEW .queue,
+        'uuid',  NEW .uuid
+    );
+
+    PERFORM pg_notify('__events', notification::TEXT);
+
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER notify_of_new_events_trigger AFTER INSERT ON events
+FOR EACH ROW EXECUTE PROCEDURE notify_of_new_events();
+```
+
+Once this is done, you can setup the publisher like so.
+
+```go
+const (
+    connectionString string = "<database connection string>"
+)
+
+func GetPostgresPublisher() *events.Publisher {
+    // create a new database connection
+    db, err := sql.Open("postgres", connectionString)
+    if err != nil {
+        panic(err)
+    }
+
+    // make a new postgres destination
+    destination, err := events.NewPostgresDestination(connectionString,
+        events.PostgresDestinationWithTopicToQueues("test1", "test_queue.1", "test_queue.2"),
+        events.PostgresDestinationWithTopicToQueues("test2", "test_queue.1", "test_queue.2"),
+
+        events.PostgresDestinationWithTableName("events"),
+        events.PostgresDestinationWithColumnNames(map[string]string{
+            "id":        "events_id",
+            "name":      "events_name",
+            "payload":   "events_payload",
+            "queue":     "events_queue",
+            "status":    "events_status",
+            "timestamp": "events_timestamp",
+            "topic":     "events_topic",
+            "uuid":      "events_uuid",
+        }),
+    )
+
+    // initialise the publisher with a sync bridge
+    publisher, err := events.NewPublisher(
+        // IMPORTANT: you must use the sync bridge with Postgres destination
+        events.PublisherWithSyncBridge(destination),
+    )
+    if err != nil {
+        panic(err)
+    }
+
+    return publisher
+}
+```
+
+Now, if you want to publish events within a database transaction, you can do it like so.
+
+```go
+func PublishWithTransaction(ctx context.Context, db *sql.DB) {
+    publisher := GetPostgresPublisher()
+    tx, _ := db.Begin()
+
+    msg, _ := events.NewMessage("test.test", nil)
+    publisher.Publish(events.WithTx(ctx, tx), msg)
+
+    tx.Commit()
 }
 ```
 
@@ -147,7 +257,7 @@ func GetCustomPublisher() *events.Publisher {
     dest := NewStdOutDestination()
 
     publisher, err := events.NewPublisher(
-        events.WithAsyncBridge(10, 200, dest),
+        events.PublisherWithAsyncBridge(10, 200, dest),
     )
     if err != nil {
         panic(err)

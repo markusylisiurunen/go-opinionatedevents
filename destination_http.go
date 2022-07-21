@@ -2,6 +2,7 @@ package opinionatedevents
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,7 +17,7 @@ type HTTPDestination struct {
 	client   httpClient
 }
 
-func (d *HTTPDestination) Deliver(msg *Message) error {
+func (d *HTTPDestination) Deliver(_ context.Context, msg *Message) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return err

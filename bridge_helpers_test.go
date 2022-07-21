@@ -1,24 +1,25 @@
 package opinionatedevents
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 )
 
-type testDestinationHandler = func(msg *Message) error
+type testDestinationHandler = func(ctx context.Context, msg *Message) error
 
 type testDestination struct {
 	handlers []testDestinationHandler
 }
 
-func (d *testDestination) Deliver(msg *Message) error {
+func (d *testDestination) Deliver(ctx context.Context, msg *Message) error {
 	handler, err := d.nextHandler()
 	if err != nil {
 		return err
 	}
 
-	return handler(msg)
+	return handler(ctx, msg)
 }
 
 func (d *testDestination) nextHandler() (testDestinationHandler, error) {

@@ -1,6 +1,7 @@
 package opinionatedevents
 
 import (
+	"context"
 	"time"
 )
 
@@ -14,8 +15,8 @@ type asyncBridge struct {
 	deliveryConfig *asyncBridgeDeliveryConfig
 }
 
-func (b *asyncBridge) take(msg *Message) *envelope {
-	env := newEnvelope(msg)
+func (b *asyncBridge) take(ctx context.Context, msg *Message) *envelope {
+	env := newEnvelope(ctx, msg)
 	go b.deliver(env)
 	return env
 }
@@ -31,7 +32,7 @@ func (b *asyncBridge) deliver(envelope *envelope) {
 		deliveredDestinations := []int{}
 
 		for i, destination := range destinations {
-			if err := destination.Deliver(envelope.message); err == nil {
+			if err := destination.Deliver(envelope.ctx, envelope.msg); err == nil {
 				deliveredDestinations = append(deliveredDestinations, i)
 			}
 		}

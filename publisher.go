@@ -1,6 +1,7 @@
 package opinionatedevents
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"sync"
@@ -25,11 +26,13 @@ func (p *Publisher) OnDeliveryFailure(handler func(msg *Message)) func() {
 	}
 }
 
-func (p *Publisher) Publish(msg *Message) error {
-	msg.meta.timestamp = time.Now()
+func (p *Publisher) Publish(ctx context.Context, msg *Message) error {
+	if msg.meta.timestamp.IsZero() {
+		msg.meta.timestamp = time.Now()
+	}
 
 	p.inFlightWaitingGroup.Add(1)
-	envelope := p.bridge.take(msg)
+	envelope := p.bridge.take(ctx, msg)
 
 	go func() {
 		select {
@@ -71,7 +74,7 @@ func NewPublisher(opts ...PublisherOption) (*Publisher, error) {
 
 type PublisherOption func(p *Publisher) error
 
-func WithSyncBridge(destinations ...Destination) PublisherOption {
+func PublisherWithSyncBridge(destinations ...Destination) PublisherOption {
 	return func(p *Publisher) error {
 		if p.bridge != nil {
 			return errors.New("cannot initialise bridge more than once")
@@ -83,7 +86,7 @@ func WithSyncBridge(destinations ...Destination) PublisherOption {
 	}
 }
 
-func WithAsyncBridge(
+func PublisherWithAsyncBridge(
 	maxAttempts int,
 	waitBetweenAttempts int,
 	destinations ...Destination,

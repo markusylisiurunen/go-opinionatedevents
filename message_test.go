@@ -11,17 +11,13 @@ import (
 
 func TestMessageSerialization(t *testing.T) {
 	t.Run("marshals and unmarshals correctly", func(t *testing.T) {
-		message := NewMessage("test")
-
-		err := message.SetPayload(&testMessagePayload{Value: "42"})
+		message, err := NewMessage("test.test", &testMessagePayload{Value: "42"})
 		assert.NoError(t, err)
-
-		message.meta.timestamp = time.Now()
 
 		serialized, err := message.MarshalJSON()
 		assert.NoError(t, err)
 
-		unserialized, err := ParseMessage(serialized)
+		unserialized, err := newMessageFromSendable(serialized)
 		assert.NoError(t, err)
 
 		assert.Equal(t, message.name, unserialized.name)
@@ -58,7 +54,7 @@ func TestMessageSerialization(t *testing.T) {
 		}
 
 		for i, message := range messages {
-			_, err := ParseMessage([]byte(message.value))
+			_, err := newMessageFromSendable([]byte(message.value))
 
 			if message.valid {
 				assert.NoError(t, err, fmt.Sprintf("error at index %d\n", i))

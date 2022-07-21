@@ -1,16 +1,18 @@
 package opinionatedevents
 
+import "context"
+
 type syncBridge struct {
 	destinations []Destination
 }
 
-func (b *syncBridge) take(msg *Message) *envelope {
-	env := newEnvelope(msg)
+func (b *syncBridge) take(ctx context.Context, msg *Message) *envelope {
+	env := newEnvelope(ctx, msg)
 
 	var possibleErr error = nil
 
 	for _, d := range b.destinations {
-		if err := d.Deliver(msg); err != nil {
+		if err := d.Deliver(ctx, msg); err != nil {
 			possibleErr = err
 		}
 	}

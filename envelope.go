@@ -1,6 +1,9 @@
 package opinionatedevents
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 const (
 	deliveryEventSuccessName string = "success"
@@ -16,7 +19,8 @@ func newDeliveryEvent(name string) *deliveryEvent {
 }
 
 type envelope struct {
-	message *Message
+	ctx context.Context
+	msg *Message
 
 	events chan *deliveryEvent
 
@@ -135,9 +139,10 @@ func (e *envelope) addProxy(proxy chan *deliveryEvent) {
 	})
 }
 
-func newEnvelope(msg *Message) *envelope {
+func newEnvelope(ctx context.Context, msg *Message) *envelope {
 	env := &envelope{
-		message: msg,
+		ctx: ctx,
+		msg: msg,
 
 		events:  make(chan *deliveryEvent),
 		proxies: []chan *deliveryEvent{},
