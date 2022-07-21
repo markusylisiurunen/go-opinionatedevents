@@ -261,10 +261,12 @@ func (d *PostgresDestination) insertMessage(
 		`
 		INSERT INTO %s %s
 		VALUES ('pending', $1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (queue, uuid) DO NOTHING
+		ON CONFLICT (%s, %s) DO NOTHING
 		`,
 		d.schema.table,
 		columns,
+		d.schema.columns[postgresColumnQueue],
+		d.schema.columns[postgresColumnUuid],
 	)
 
 	args := []any{topic, queue, timestamp.UTC(), timestamp.UTC(), uuid, name, payload}
