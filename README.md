@@ -147,9 +147,9 @@ CREATE TABLE events (
     event_name       TEXT NOT NULL,
     event_data       JSON NOT NULL,
 
-    UNIQUE (queue, uuid),
+    UNIQUE (event_queue, event_uuid),
 
-    CHECK (status IN ('pending', 'processed', 'dropped'))
+    CHECK (event_status IN ('pending', 'processed', 'dropped'))
 );
 
 -- index for making ordered queries for a certain set of queues with a `pending` status
@@ -165,9 +165,9 @@ DECLARE
     notification JSON;
 BEGIN
     notification = json_build_object(
-        'topic', NEW .topic,
-        'queue', NEW .queue,
-        'uuid',  NEW .uuid
+        'topic', NEW .event_topic,
+        'queue', NEW .event_queue,
+        'uuid',  NEW .event_uuid
     );
 
     PERFORM pg_notify('__events', notification::TEXT);
