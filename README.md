@@ -137,15 +137,16 @@ create a table to your database for the messages.
 
 ```sql
 CREATE TABLE events (
-    event_id         SERIAL PRIMARY KEY,
-    event_timestamp  TIMESTAMP WITH TIME ZONE NOT NULL,
-    event_deliver_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    event_status     TEXT NOT NULL,
-    event_topic      TEXT NOT NULL,
-    event_queue      TEXT NOT NULL,
-    event_uuid       TEXT NOT NULL,
-    event_name       TEXT NOT NULL,
-    event_data       JSON NOT NULL,
+    event_id                SERIAL PRIMARY KEY,
+    event_timestamp         TIMESTAMP WITH TIME ZONE NOT NULL,
+    event_deliver_at        TIMESTAMP WITH TIME ZONE NOT NULL,
+    event_delivery_attempts INTEGER NOT NULL DEFAULT 0,
+    event_status            TEXT NOT NULL,
+    event_topic             TEXT NOT NULL,
+    event_queue             TEXT NOT NULL,
+    event_uuid              TEXT NOT NULL,
+    event_name              TEXT NOT NULL,
+    event_payload           JSON NOT NULL,
 
     UNIQUE (event_queue, event_uuid),
 
@@ -201,14 +202,16 @@ func GetPostgresPublisher() *events.Publisher {
 
         events.PostgresDestinationWithTableName("events"),
         events.PostgresDestinationWithColumnNames(map[string]string{
-            "id":        "events_id",
-            "name":      "events_name",
-            "payload":   "events_payload",
-            "queue":     "events_queue",
-            "status":    "events_status",
-            "timestamp": "events_timestamp",
-            "topic":     "events_topic",
-            "uuid":      "events_uuid",
+            "id":                "events_id",
+            "timestamp":         "events_timestamp",
+            "deliver_at":        "events_deliver_at",
+            "delivery_attempts": "events_delivery_attempts",
+            "status":            "events_status",
+            "topic":             "events_topic",
+            "queue":             "events_queue",
+            "uuid":              "events_uuid",
+            "name":              "events_name",
+            "payload":           "events_payload",
         }),
     )
 

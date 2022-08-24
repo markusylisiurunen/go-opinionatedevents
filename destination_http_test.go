@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -91,7 +91,7 @@ func TestHTTPDestination(t *testing.T) {
 
 			assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 
-			body, err := ioutil.ReadAll(req.Body)
+			body, err := io.ReadAll(req.Body)
 			if err != nil {
 				return nil, err
 			}

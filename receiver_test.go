@@ -72,7 +72,7 @@ func TestReceiver(t *testing.T) {
 				assert.NoError(t, receiver.On(name, onMessageHandler))
 			}
 
-			result := receiver.Receive(context.Background(), []byte(tc.messageData))
+			result := receiver.Receive(context.Background(), Delivery{[]byte(tc.messageData), 1})
 
 			if tc.errorsAfterReceive {
 				assert.Error(t, result.error())

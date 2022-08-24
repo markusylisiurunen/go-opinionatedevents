@@ -271,7 +271,7 @@ func (r *ReceiveFromPostgres) processMessages() error {
 func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (int64, error) {
 	selectQuery := fmt.Sprintf(
 		`
-		SELECT %s, %s, %s, %s
+		SELECT %s, %s, %s, %s, %s
 		FROM %s
 		WHERE
 			%s = 'pending' AND
@@ -286,6 +286,7 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 		r.schema.columns[postgresColumnUuid],
 		r.schema.columns[postgresColumnQueue],
 		r.schema.columns[postgresColumnPayload],
+		r.schema.columns[postgresColumnDeliveryAttempts],
 		r.schema.table,
 		r.schema.columns[postgresColumnStatus],
 		r.schema.columns[postgresColumnQueue],
@@ -298,6 +299,15 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 		`UPDATE %s SET %s = $1 WHERE %s = $2 AND %s = $3`,
 		r.schema.table,
 		r.schema.columns[postgresColumnStatus],
+		r.schema.columns[postgresColumnQueue],
+		r.schema.columns[postgresColumnUuid],
+	)
+
+	incrementDeliveryAttemptsQuery := fmt.Sprintf(
+		`UPDATE %s SET %s = %s + 1 WHERE %s = $1 AND %s = $2`,
+		r.schema.table,
+		r.schema.columns[postgresColumnDeliveryAttempts],
+		r.schema.columns[postgresColumnDeliveryAttempts],
 		r.schema.columns[postgresColumnQueue],
 		r.schema.columns[postgresColumnUuid],
 	)
@@ -316,8 +326,9 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 	var uuid string
 	var queue string
 	var payload string
+	var deliveryAttempts int64
 
-	if err := row.Scan(&id, &uuid, &queue, &payload); err != nil {
+	if err := row.Scan(&id, &uuid, &queue, &payload, &deliveryAttempts); err != nil {
 		if err == sql.ErrNoRows {
 			return -1, nil
 		}
@@ -325,7 +336,20 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 		return -1, err
 	}
 
-	receiveResult := r.receiver.Receive(context.Background(), []byte(payload))
+	receiveResult := r.receiver.Receive(context.Background(),
+		Delivery{[]byte(payload), int(deliveryAttempts) + 1},
+	)
+
+	// record the delivery attempt
+	if result, err := tx.Exec(incrementDeliveryAttemptsQuery, queue, uuid); err != nil {
+		return id, err
+	} else {
+		if rowCount, err := result.RowsAffected(); err != nil {
+			return id, err
+		} else if rowCount != 1 {
+			return id, errors.New("could not increment delivery attempts")
+		}
+	}
 
 	if receiveResult.error() != nil {
 		retryAt := receiveResult.retryAt()
@@ -368,7 +392,7 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 		if rowCount, err := result.RowsAffected(); err != nil {
 			return id, err
 		} else if rowCount != 1 {
-			return id, errors.New("could not update message delivery time")
+			return id, errors.New("could not update message status to 'processed'")
 		}
 	}
 
