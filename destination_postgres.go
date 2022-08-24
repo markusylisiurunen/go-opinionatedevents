@@ -86,15 +86,16 @@ func (t *postgresRoutingTable) route(topic string) []string {
 type postgresSchemaColumn string
 
 const (
-	postgresColumnDeliverAt                      = postgresSchemaColumn("deliver_at")
-	postgresColumnId        postgresSchemaColumn = postgresSchemaColumn("id")
-	postgresColumnName                           = postgresSchemaColumn("name")
-	postgresColumnPayload                        = postgresSchemaColumn("payload")
-	postgresColumnQueue                          = postgresSchemaColumn("queue")
-	postgresColumnStatus                         = postgresSchemaColumn("status")
-	postgresColumnTimestamp                      = postgresSchemaColumn("timestamp")
-	postgresColumnTopic                          = postgresSchemaColumn("topic")
-	postgresColumnUuid                           = postgresSchemaColumn("uuid")
+	postgresColumnDeliverAt        postgresSchemaColumn = postgresSchemaColumn("deliver_at")
+	postgresColumnDeliveryAttempts                      = postgresSchemaColumn("delivery_attempts")
+	postgresColumnId                                    = postgresSchemaColumn("id")
+	postgresColumnName                                  = postgresSchemaColumn("name")
+	postgresColumnPayload                               = postgresSchemaColumn("payload")
+	postgresColumnQueue                                 = postgresSchemaColumn("queue")
+	postgresColumnStatus                                = postgresSchemaColumn("status")
+	postgresColumnTimestamp                             = postgresSchemaColumn("timestamp")
+	postgresColumnTopic                                 = postgresSchemaColumn("topic")
+	postgresColumnUuid                                  = postgresSchemaColumn("uuid")
 )
 
 type postgresSchema struct {
@@ -106,15 +107,16 @@ func newPostgresSchema() *postgresSchema {
 	return &postgresSchema{
 		table: "events",
 		columns: map[postgresSchemaColumn]string{
-			postgresColumnDeliverAt: "deliver_at",
-			postgresColumnId:        "id",
-			postgresColumnName:      "name",
-			postgresColumnPayload:   "payload",
-			postgresColumnQueue:     "queue",
-			postgresColumnStatus:    "status",
-			postgresColumnTimestamp: "timestamp",
-			postgresColumnTopic:     "topic",
-			postgresColumnUuid:      "uuid",
+			postgresColumnDeliverAt:        "deliver_at",
+			postgresColumnDeliveryAttempts: "delivery_attempts",
+			postgresColumnId:               "id",
+			postgresColumnName:             "name",
+			postgresColumnPayload:          "payload",
+			postgresColumnQueue:            "queue",
+			postgresColumnStatus:           "status",
+			postgresColumnTimestamp:        "timestamp",
+			postgresColumnTopic:            "topic",
+			postgresColumnUuid:             "uuid",
 		},
 	}
 }

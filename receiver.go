@@ -8,12 +8,17 @@ import (
 
 type OnMessageHandler func(ctx context.Context, msg *Message) Result
 
+type Delivery struct {
+	Data    []byte
+	Attempt int
+}
+
 type Receiver struct {
 	onMessage map[string]OnMessageHandler
 }
 
-func (r *Receiver) Receive(ctx context.Context, data []byte) Result {
-	msg, err := newMessageFromSendable(data)
+func (r *Receiver) Receive(ctx context.Context, delivery Delivery) Result {
+	msg, err := newMessageFromSendable(delivery.Data, messageDeliveryMeta{attempt: delivery.Attempt})
 	if err != nil {
 		return ErrorResult(err)
 	}

@@ -31,10 +31,15 @@ type messageMeta struct {
 	timestamp time.Time
 }
 
+type messageDeliveryMeta struct {
+	attempt int
+}
+
 type Message struct {
-	name    string
-	payload []byte
-	meta    messageMeta
+	name     string
+	payload  []byte
+	meta     messageMeta
+	delivery messageDeliveryMeta
 }
 
 func (m *Message) Name() string {
@@ -53,12 +58,12 @@ func (msg *Message) Payload(payload payloadable) error {
 	return payload.UnmarshalPayload(msg.payload)
 }
 
-func (msg *Message) MarshalJSON() ([]byte, error) {
+func (m *Message) MarshalJSON() ([]byte, error) {
 	return json.Marshal(
 		sendable{
-			Name:    msg.name,
-			Payload: msg.payload,
-			Meta:    sendableMeta{UUID: msg.meta.uuid, Timestamp: msg.meta.timestamp.UTC()},
+			Name:    m.name,
+			Payload: m.payload,
+			Meta:    sendableMeta{UUID: m.meta.uuid, Timestamp: m.meta.timestamp.UTC()},
 		},
 	)
 }
@@ -70,9 +75,10 @@ func NewMessage(name string, payload payloadable) (*Message, error) {
 	}
 
 	message := &Message{
-		name:    name,
-		payload: nil,
-		meta:    messageMeta{uuid: uuid.New().String(), timestamp: time.Now().UTC()},
+		name:     name,
+		payload:  nil,
+		meta:     messageMeta{uuid: uuid.New().String(), timestamp: time.Now().UTC()},
+		delivery: messageDeliveryMeta{attempt: 0},
 	}
 
 	if payload != nil {
@@ -86,7 +92,7 @@ func NewMessage(name string, payload payloadable) (*Message, error) {
 	return message, nil
 }
 
-func newMessageFromSendable(data []byte) (*Message, error) {
+func newMessageFromSendable(data []byte, delivery messageDeliveryMeta) (*Message, error) {
 	sendable := &sendable{}
 
 	if err := json.Unmarshal(data, sendable); err != nil {
@@ -98,9 +104,10 @@ func newMessageFromSendable(data []byte) (*Message, error) {
 	}
 
 	message := &Message{
-		name:    sendable.Name,
-		payload: sendable.Payload,
-		meta:    messageMeta{uuid: sendable.Meta.UUID, timestamp: sendable.Meta.Timestamp},
+		name:     sendable.Name,
+		payload:  sendable.Payload,
+		meta:     messageMeta{uuid: sendable.Meta.UUID, timestamp: sendable.Meta.Timestamp},
+		delivery: delivery,
 	}
 
 	return message, nil

@@ -17,7 +17,7 @@ func TestMessageSerialization(t *testing.T) {
 		serialized, err := message.MarshalJSON()
 		assert.NoError(t, err)
 
-		unserialized, err := newMessageFromSendable(serialized)
+		unserialized, err := newMessageFromSendable(serialized, messageDeliveryMeta{1})
 		assert.NoError(t, err)
 
 		assert.Equal(t, message.name, unserialized.name)
@@ -54,7 +54,7 @@ func TestMessageSerialization(t *testing.T) {
 		}
 
 		for i, message := range messages {
-			_, err := newMessageFromSendable([]byte(message.value))
+			_, err := newMessageFromSendable([]byte(message.value), messageDeliveryMeta{1})
 
 			if message.valid {
 				assert.NoError(t, err, fmt.Sprintf("error at index %d\n", i))
