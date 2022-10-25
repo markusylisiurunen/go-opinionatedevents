@@ -337,7 +337,7 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 	}
 
 	receiveResult := r.receiver.Receive(context.Background(),
-		Delivery{[]byte(payload), int(deliveryAttempts) + 1},
+		Delivery{[]byte(payload), queue, int(deliveryAttempts) + 1},
 	)
 
 	// record the delivery attempt

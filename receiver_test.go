@@ -12,49 +12,71 @@ func TestReceiver(t *testing.T) {
 	log := []string{}
 
 	tt := []struct {
-		name               string
-		messageData        string
-		logAfterReceive    []string
-		errorsAfterReceive bool
-		onMessageHandlers  map[string]OnMessageHandler
+		name                  string
+		messageQueue          string
+		messageData           string
+		logAfterReceive       []string
+		errorsAfterReceive    bool
+		onMessageHandlerQueue string
+		onMessageHandlers     map[string]OnMessageHandler
 	}{
 		{
 			name:               "a valid test message",
+			messageQueue:       "test",
 			messageData:        `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
 			logAfterReceive:    []string{"test"},
 			errorsAfterReceive: false,
 
+			onMessageHandlerQueue: "test",
 			onMessageHandlers: map[string]OnMessageHandler{
 				"test":    makeOnMessageHandler("test", &log, false),
 				"unknown": makeOnMessageHandler("unknown", &log, false),
 			},
 		},
 		{
-			name:               "no handler registered",
+			name:               "no handler registered for message name",
+			messageQueue:       "test",
 			messageData:        `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
 			logAfterReceive:    []string{},
 			errorsAfterReceive: true,
 
+			onMessageHandlerQueue: "test",
 			onMessageHandlers: map[string]OnMessageHandler{
 				"unknown": makeOnMessageHandler("unknown", &log, false),
 			},
 		},
 		{
+			name:               "no handler registered for queue",
+			messageQueue:       "test",
+			messageData:        `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
+			logAfterReceive:    []string{},
+			errorsAfterReceive: true,
+
+			onMessageHandlerQueue: "unknown",
+			onMessageHandlers: map[string]OnMessageHandler{
+				"test": makeOnMessageHandler("test", &log, false),
+			},
+		},
+		{
 			name:               "an invalid message",
+			messageQueue:       "test",
 			messageData:        `{"name":"test","meta":{"timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
 			logAfterReceive:    []string{},
 			errorsAfterReceive: true,
 
+			onMessageHandlerQueue: "test",
 			onMessageHandlers: map[string]OnMessageHandler{
 				"test": makeOnMessageHandler("test", &log, false),
 			},
 		},
 		{
 			name:               "handler returns an error",
+			messageQueue:       "test",
 			messageData:        `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
 			logAfterReceive:    []string{"test"},
 			errorsAfterReceive: true,
 
+			onMessageHandlerQueue: "test",
 			onMessageHandlers: map[string]OnMessageHandler{
 				"test": makeOnMessageHandler("test", &log, true),
 			},
@@ -69,10 +91,14 @@ func TestReceiver(t *testing.T) {
 			assert.NoError(t, err)
 
 			for name, onMessageHandler := range tc.onMessageHandlers {
-				assert.NoError(t, receiver.On(name, onMessageHandler))
+				assert.NoError(t, receiver.On(name, tc.onMessageHandlerQueue, onMessageHandler))
 			}
 
-			result := receiver.Receive(context.Background(), Delivery{[]byte(tc.messageData), 1})
+			result := receiver.Receive(context.Background(), Delivery{
+				Data:    []byte(tc.messageData),
+				Queue:   tc.messageQueue,
+				Attempt: 1,
+			})
 
 			if tc.errorsAfterReceive {
 				assert.Error(t, result.error())
@@ -87,7 +113,7 @@ func TestReceiver(t *testing.T) {
 }
 
 func makeOnMessageHandler(name string, log *[]string, returnsErr bool) OnMessageHandler {
-	return func(_ context.Context, _ *Message) Result {
+	return func(_ context.Context, _ string, _ *Message) Result {
 		*log = append(*log, name)
 
 		if returnsErr {

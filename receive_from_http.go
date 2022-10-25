@@ -21,7 +21,7 @@ func MakeReceiveFromHTTP(_ context.Context, receiver *Receiver) http.HandlerFunc
 			return
 		}
 
-		if result := receiver.Receive(req.Context(), Delivery{body, 1}); result.error() != nil {
+		if result := receiver.Receive(req.Context(), Delivery{body, "test", 1}); result.error() != nil {
 			resp.WriteHeader(500)
 		}
 	}

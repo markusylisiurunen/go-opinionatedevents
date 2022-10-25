@@ -8,8 +8,8 @@ type OnMessageMiddleware func(next OnMessageHandler) OnMessageHandler
 
 func WithBackoff(backoff Backoff) OnMessageMiddleware {
 	return func(next OnMessageHandler) OnMessageHandler {
-		return func(ctx context.Context, msg *Message) Result {
-			res := next(ctx, msg)
+		return func(ctx context.Context, queue string, msg *Message) Result {
+			res := next(ctx, queue, msg)
 			if res.error() == nil {
 				return res
 			}
@@ -24,8 +24,8 @@ func WithBackoff(backoff Backoff) OnMessageMiddleware {
 
 func WithLimit(limit int) OnMessageMiddleware {
 	return func(next OnMessageHandler) OnMessageHandler {
-		return func(ctx context.Context, msg *Message) Result {
-			res := next(ctx, msg)
+		return func(ctx context.Context, queue string, msg *Message) Result {
+			res := next(ctx, queue, msg)
 			if res.error() == nil {
 				return res
 			}

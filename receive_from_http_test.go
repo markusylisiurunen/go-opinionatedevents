@@ -44,7 +44,7 @@ func TestReceiveFromHTTP(t *testing.T) {
 			receiver, err := NewReceiver()
 			assert.NoError(t, err)
 
-			err = receiver.On("test.test", func(ctx context.Context, msg *Message) Result {
+			err = receiver.On("test", "test.test", func(_ context.Context, _ string, _ *Message) Result {
 				return SuccessResult()
 			})
 			assert.NoError(t, err)

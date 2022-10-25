@@ -17,9 +17,10 @@ const (
 	connectionString string = "postgres://postgres:password@localhost:6543/dev?sslmode=disable"
 )
 
-func onCustomerCreated(_ context.Context, msg *opinionatedevents.Message) opinionatedevents.Result {
-	fmt.Printf("received a message: %s, %s, %s\n",
+func onCustomerCreated(_ context.Context, queue string, msg *opinionatedevents.Message) opinionatedevents.Result {
+	fmt.Printf("received a message: %s, %s, %s, %s\n",
 		msg.Timestamp().Local().Format(time.RFC3339),
+		queue,
 		msg.Name(),
 		msg.UUID(),
 	)
@@ -47,12 +48,14 @@ func main() {
 	}
 
 	// attach the handlers
-	receiver.On("customers.created", opinionatedevents.WithLimit(3)(
-		// from the 2nd attempt: 30s, 94s, 566s, 1800s, 1800s...
-		opinionatedevents.WithBackoff(opinionatedevents.ExponentialBackoff(30, 10, 2, 30*time.Minute))(
-			onCustomerCreated,
-		),
-	))
+	for _, queue := range []string{"svc_1", "svc_2"} {
+		receiver.On(queue, "customers.created", opinionatedevents.WithLimit(3)(
+			// from the 2nd attempt: 30s, 94s, 566s, 1800s, 1800s...
+			opinionatedevents.WithBackoff(opinionatedevents.ExponentialBackoff(30, 10, 2, 30*time.Minute))(
+				onCustomerCreated,
+			),
+		))
+	}
 
 	// attach postgres events to the receiver
 	_, err = opinionatedevents.MakeReceiveFromPostgres(ctx, receiver, connectionString,
