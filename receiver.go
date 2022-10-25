@@ -6,15 +6,16 @@ import (
 	"fmt"
 )
 
-type OnMessageHandler func(ctx context.Context, msg *Message) Result
+type OnMessageHandler func(ctx context.Context, queue string, msg *Message) Result
 
 type Delivery struct {
 	Data    []byte
+	Queue   string
 	Attempt int
 }
 
 type Receiver struct {
-	onMessage map[string]OnMessageHandler
+	onMessage map[string]map[string]OnMessageHandler
 }
 
 func (r *Receiver) Receive(ctx context.Context, delivery Delivery) Result {
@@ -23,29 +24,36 @@ func (r *Receiver) Receive(ctx context.Context, delivery Delivery) Result {
 		return ErrorResult(err)
 	}
 
-	if onMessageHandler, ok := r.onMessage[msg.name]; ok {
-		return onMessageHandler(ctx, msg)
+	if onMessageForQueue, ok := r.onMessage[delivery.Queue]; ok {
+		if onMessageHandler, ok := onMessageForQueue[msg.name]; ok {
+			return onMessageHandler(ctx, delivery.Queue, msg)
+		}
 	}
 
 	// if there is no handler attached, the message will be dropped
+	// TODO: is this correct behavior? should there be some kind of a fallback handler?
 	return ErrorResult(errors.New("no message handler found"),
 		ResultWithNoRetries(),
 	)
 }
 
-func (r *Receiver) On(name string, onMessage OnMessageHandler) error {
-	if _, ok := r.onMessage[name]; ok {
+func (r *Receiver) On(queue string, name string, onMessage OnMessageHandler) error {
+	if _, ok := r.onMessage[queue]; !ok {
+		r.onMessage[queue] = map[string]OnMessageHandler{}
+	}
+
+	if _, ok := r.onMessage[queue][name]; ok {
 		return fmt.Errorf("only one handler per message type is allowed")
 	}
 
-	r.onMessage[name] = onMessage
+	r.onMessage[queue][name] = onMessage
 
 	return nil
 }
 
 func NewReceiver() (*Receiver, error) {
 	receiver := &Receiver{
-		onMessage: map[string]OnMessageHandler{},
+		onMessage: map[string]map[string]OnMessageHandler{},
 	}
 
 	return receiver, nil

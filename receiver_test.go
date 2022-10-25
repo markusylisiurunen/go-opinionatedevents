@@ -69,10 +69,10 @@ func TestReceiver(t *testing.T) {
 			assert.NoError(t, err)
 
 			for name, onMessageHandler := range tc.onMessageHandlers {
-				assert.NoError(t, receiver.On(name, onMessageHandler))
+				assert.NoError(t, receiver.On(name, "test", onMessageHandler))
 			}
 
-			result := receiver.Receive(context.Background(), Delivery{[]byte(tc.messageData), 1})
+			result := receiver.Receive(context.Background(), Delivery{[]byte(tc.messageData), "test", 1})
 
 			if tc.errorsAfterReceive {
 				assert.Error(t, result.error())
@@ -87,7 +87,7 @@ func TestReceiver(t *testing.T) {
 }
 
 func makeOnMessageHandler(name string, log *[]string, returnsErr bool) OnMessageHandler {
-	return func(_ context.Context, _ *Message) Result {
+	return func(_ context.Context, _ string, _ *Message) Result {
 		*log = append(*log, name)
 
 		if returnsErr {
