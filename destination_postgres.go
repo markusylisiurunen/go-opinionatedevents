@@ -91,9 +91,9 @@ const (
 	postgresColumnId                                    = postgresSchemaColumn("id")
 	postgresColumnName                                  = postgresSchemaColumn("name")
 	postgresColumnPayload                               = postgresSchemaColumn("payload")
+	postgresColumnPublishedAt                           = postgresSchemaColumn("published_at")
 	postgresColumnQueue                                 = postgresSchemaColumn("queue")
 	postgresColumnStatus                                = postgresSchemaColumn("status")
-	postgresColumnTimestamp                             = postgresSchemaColumn("timestamp")
 	postgresColumnTopic                                 = postgresSchemaColumn("topic")
 	postgresColumnUuid                                  = postgresSchemaColumn("uuid")
 )
@@ -112,9 +112,9 @@ func newPostgresSchema() *postgresSchema {
 			postgresColumnId:               "id",
 			postgresColumnName:             "name",
 			postgresColumnPayload:          "payload",
+			postgresColumnPublishedAt:      "published_at",
 			postgresColumnQueue:            "queue",
 			postgresColumnStatus:           "status",
-			postgresColumnTimestamp:        "timestamp",
 			postgresColumnTopic:            "topic",
 			postgresColumnUuid:             "uuid",
 		},
@@ -224,14 +224,14 @@ func (d *PostgresDestination) Deliver(ctx context.Context, msg *Message) error {
 		return err
 	}
 
-	topic := strings.Split(msg.name, ".")[0]
+	topic := strings.Split(msg.Name, ".")[0]
 
-	timestamp := msg.meta.timestamp
-	uuid := msg.meta.uuid
+	publishedAt := msg.PublishedAt
+	uuid := msg.UUID
 
 	return d.tx.do(ctx, func(tx sqlTx) error {
 		for _, queue := range d.router.route(topic) {
-			if err := d.insertMessage(tx, topic, queue, timestamp, uuid, msg.name, payload); err != nil {
+			if err := d.insertMessage(tx, topic, queue, publishedAt, uuid, msg.Name, payload); err != nil {
 				return err
 			}
 		}
@@ -243,7 +243,7 @@ func (d *PostgresDestination) insertMessage(
 	tx sqlTx,
 	topic string,
 	queue string,
-	timestamp time.Time,
+	publishedAt time.Time,
 	uuid string,
 	name string,
 	payload []byte,
@@ -252,7 +252,7 @@ func (d *PostgresDestination) insertMessage(
 		d.schema.columns[postgresColumnStatus],
 		d.schema.columns[postgresColumnTopic],
 		d.schema.columns[postgresColumnQueue],
-		d.schema.columns[postgresColumnTimestamp],
+		d.schema.columns[postgresColumnPublishedAt],
 		d.schema.columns[postgresColumnDeliverAt],
 		d.schema.columns[postgresColumnUuid],
 		d.schema.columns[postgresColumnName],
@@ -271,7 +271,7 @@ func (d *PostgresDestination) insertMessage(
 		d.schema.columns[postgresColumnUuid],
 	)
 
-	args := []any{topic, queue, timestamp.UTC(), timestamp.UTC(), uuid, name, payload}
+	args := []any{topic, queue, publishedAt.UTC(), publishedAt.UTC(), uuid, name, payload}
 	_, err := tx.Exec(query, args...)
 
 	return err

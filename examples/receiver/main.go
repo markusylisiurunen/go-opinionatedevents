@@ -17,22 +17,24 @@ const (
 	connectionString string = "postgres://postgres:password@localhost:6543/dev?sslmode=disable"
 )
 
-func onCustomerCreated(_ context.Context, queue string, msg *opinionatedevents.Message) opinionatedevents.Result {
+func onCustomerCreated(_ context.Context, queue string, delivery opinionatedevents.Delivery) opinionatedevents.ResultContainer {
+	msg := delivery.GetMessage()
+
 	fmt.Printf("received a message: %s, %s, %s, %s\n",
-		msg.Timestamp().Local().Format(time.RFC3339),
+		msg.PublishedAt.Local().Format(time.RFC3339),
 		queue,
-		msg.Name(),
-		msg.UUID(),
+		msg.Name,
+		msg.UUID,
 	)
 
-	if strings.HasPrefix(strings.ToLower(msg.UUID()), "a") {
+	if strings.HasPrefix(strings.ToLower(msg.UUID), "a") {
 		err := errors.New("UUID begins with an unacceptable character")
-		return opinionatedevents.ErrorResult(err, opinionatedevents.ResultWithNoRetries())
+		return opinionatedevents.FatalResult(err)
 	}
 
-	if strings.HasPrefix(strings.ToLower(msg.UUID()), "b") {
+	if strings.HasPrefix(strings.ToLower(msg.UUID), "b") {
 		err := errors.New("UUID begins with an unacceptable character")
-		return opinionatedevents.ErrorResult(err, opinionatedevents.ResultWithRetryAfter(time.Second))
+		return opinionatedevents.RetryResult(err, time.Second)
 	}
 
 	return opinionatedevents.SuccessResult()

@@ -138,7 +138,7 @@ create a table to your database for the messages.
 ```sql
 CREATE TABLE events (
     event_id                SERIAL PRIMARY KEY,
-    event_timestamp         TIMESTAMP WITH TIME ZONE NOT NULL,
+    event_published_at      TIMESTAMP WITH TIME ZONE NOT NULL,
     event_deliver_at        TIMESTAMP WITH TIME ZONE NOT NULL,
     event_delivery_attempts INTEGER NOT NULL DEFAULT 0,
     event_status            TEXT NOT NULL,
@@ -154,8 +154,8 @@ CREATE TABLE events (
 );
 
 -- index for making ordered queries for a certain set of queues with a `pending` status
-CREATE INDEX events_status_queue_timestamp_idx
-ON events (event_status, event_queue, event_timestamp);
+CREATE INDEX events_status_queue_published_at_idx
+ON events (event_status, event_queue, event_published_at);
 
 -- index for making updates to a specific message
 CREATE INDEX events_uuid_queue_idx
@@ -203,7 +203,7 @@ func GetPostgresPublisher() *events.Publisher {
         events.PostgresDestinationWithTableName("events"),
         events.PostgresDestinationWithColumnNames(map[string]string{
             "id":                "events_id",
-            "timestamp":         "events_timestamp",
+            "published_at":      "events_published_at",
             "deliver_at":        "events_deliver_at",
             "delivery_attempts": "events_delivery_attempts",
             "status":            "events_status",

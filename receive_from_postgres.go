@@ -3,6 +3,7 @@ package opinionatedevents
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -133,6 +134,30 @@ func (t *postgresReceiverAggregateTrigger) Start(ctx context.Context) chan struc
 	}
 
 	return c
+}
+
+// Postgres delivery
+// ---
+
+type postgresDelivery struct {
+	attempt int
+	message *Message
+}
+
+func newPostgresDelivery(data []byte, attempt int) (*postgresDelivery, error) {
+	msg := &Message{}
+	if err := json.Unmarshal(data, msg); err != nil {
+		return nil, err
+	}
+	return &postgresDelivery{attempt: attempt, message: msg}, nil
+}
+
+func (d *postgresDelivery) GetAttempt() int {
+	return d.attempt
+}
+
+func (d *postgresDelivery) GetMessage() *Message {
+	return d.message
 }
 
 // Postgres receiver
@@ -292,7 +317,7 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 		r.schema.columns[postgresColumnQueue],
 		r.schema.columns[postgresColumnId],
 		r.schema.columns[postgresColumnDeliverAt],
-		r.schema.columns[postgresColumnTimestamp],
+		r.schema.columns[postgresColumnPublishedAt],
 	)
 
 	statusQuery := fmt.Sprintf(
@@ -336,9 +361,12 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 		return -1, err
 	}
 
-	receiveResult := r.receiver.Receive(context.Background(),
-		Delivery{[]byte(payload), queue, int(deliveryAttempts) + 1},
-	)
+	delivery, err := newPostgresDelivery([]byte(payload), int(deliveryAttempts)+1)
+	if err != nil {
+		return -1, err
+	}
+
+	receiveResult := r.receiver.Receive(context.Background(), queue, delivery)
 
 	// record the delivery attempt
 	if result, err := tx.Exec(incrementDeliveryAttemptsQuery, queue, uuid); err != nil {
@@ -351,8 +379,8 @@ func (r *ReceiveFromPostgres) processNextMessage(tx *sql.Tx, visited []int64) (i
 		}
 	}
 
-	if receiveResult.error() != nil {
-		retryAt := receiveResult.retryAt()
+	if receiveResult.GetResult().Err != nil {
+		retryAt := receiveResult.GetResult().RetryAt
 
 		// if the retry at time has a zero value, the message should be dropped instead of retried
 		if retryAt.IsZero() {
