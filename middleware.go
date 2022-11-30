@@ -8,29 +8,23 @@ type OnMessageMiddleware func(next OnMessageHandler) OnMessageHandler
 
 func WithBackoff(backoff Backoff) OnMessageMiddleware {
 	return func(next OnMessageHandler) OnMessageHandler {
-		return func(ctx context.Context, queue string, msg *Message) Result {
-			res := next(ctx, queue, msg)
-			if res.error() == nil {
+		return func(ctx context.Context, queue string, delivery Delivery) ResultContainer {
+			res := next(ctx, queue, delivery)
+			if res.GetResult().Err == nil || res.GetResult().RetryAt.IsZero() {
 				return res
 			}
-			if res.retryAt().IsZero() {
-				return res
-			}
-			attempt := msg.delivery.attempt + 1
-			return ErrorResult(res.error(), ResultWithRetryAfter(backoff.DeliverAfter(attempt)))
+			i := delivery.GetAttempt() + 1
+			return ErrorResult(res.GetResult().Err, backoff.DeliverAfter(i))
 		}
 	}
 }
 
 func WithLimit(limit int) OnMessageMiddleware {
 	return func(next OnMessageHandler) OnMessageHandler {
-		return func(ctx context.Context, queue string, msg *Message) Result {
-			res := next(ctx, queue, msg)
-			if res.error() == nil {
-				return res
-			}
-			if msg.delivery.attempt >= limit {
-				return ErrorResult(res.error(), ResultWithNoRetries())
+		return func(ctx context.Context, queue string, delivery Delivery) ResultContainer {
+			res := next(ctx, queue, delivery)
+			if res.GetResult().Err != nil && delivery.GetAttempt() >= limit {
+				return FatalResult(res.GetResult().Err)
 			}
 			return res
 		}

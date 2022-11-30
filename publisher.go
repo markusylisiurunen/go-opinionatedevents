@@ -27,8 +27,8 @@ func (p *Publisher) OnDeliveryFailure(handler func(msg *Message)) func() {
 }
 
 func (p *Publisher) Publish(ctx context.Context, msg *Message) error {
-	if msg.meta.timestamp.IsZero() {
-		msg.meta.timestamp = time.Now()
+	if msg.PublishedAt.IsZero() {
+		msg.PublishedAt = time.Now()
 	}
 
 	p.inFlightWaitingGroup.Add(1)

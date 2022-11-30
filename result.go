@@ -2,80 +2,48 @@ package opinionatedevents
 
 import "time"
 
-type Result interface {
-	error() error
-	retryAt() time.Time
+type Result struct {
+	Err     error
+	RetryAt time.Time
 }
 
-// Error result
-// ---
-
-type errorResult struct {
-	err        error
-	retryDelay time.Duration
+type ResultContainer interface {
+	GetResult() *Result
 }
-
-func (r *errorResult) error() error {
-	return r.err
-}
-
-func (r *errorResult) retryAt() time.Time {
-	if r.retryDelay.Nanoseconds() == 0 {
-		var zero time.Time
-		return zero
-	}
-
-	return time.Now().Add(r.retryDelay)
-}
-
-// Success result
-// ---
 
 type successResult struct{}
 
-func (r *successResult) error() error {
-	return nil
+func SuccessResult() *successResult {
+	return &successResult{}
 }
 
-func (r *successResult) retryAt() time.Time {
+func (r *successResult) GetResult() *Result {
 	var zero time.Time
-	return zero
+	return &Result{Err: nil, RetryAt: zero}
 }
 
-// Builders
-// ---
-
-type errorResultOption func(r *errorResult)
-type successResultOption func(r *successResult)
-
-func ErrorResult(err error, opts ...errorResultOption) Result {
-	result := &errorResult{err: err, retryDelay: 30 * time.Second}
-
-	for _, applyOption := range opts {
-		applyOption(result)
-	}
-
-	return result
+type errorResult struct {
+	err     error
+	retryAt time.Time
 }
 
-func SuccessResult(opts ...successResultOption) Result {
-	result := &successResult{}
-
-	for _, applyOption := range opts {
-		applyOption(result)
-	}
-
-	return result
+func ErrorResult(err error, delay time.Duration) *errorResult {
+	return &errorResult{err: err, retryAt: time.Now().Add(delay)}
 }
 
-func ResultWithNoRetries() errorResultOption {
-	return func(r *errorResult) {
-		r.retryDelay = 0 * time.Nanosecond
-	}
+func (r *errorResult) GetResult() *Result {
+	return &Result{Err: r.err, RetryAt: r.retryAt}
 }
 
-func ResultWithRetryAfter(delay time.Duration) errorResultOption {
-	return func(r *errorResult) {
-		r.retryDelay = delay
-	}
+type fatalResult struct {
+	err error
+}
+
+func FatalResult(err error) *fatalResult {
+	return &fatalResult{err: err}
+}
+
+func (r *fatalResult) GetResult() *Result {
+	var zero time.Time
+	return &Result{Err: r.err, RetryAt: zero}
 }

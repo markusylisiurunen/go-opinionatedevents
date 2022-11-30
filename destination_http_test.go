@@ -106,10 +106,10 @@ func TestHTTPDestination(t *testing.T) {
 
 			assert.IsType(t, "", payload["name"])
 			assert.IsType(t, "", payload["payload"])
-			assert.IsType(t, "", meta["timestamp"])
+			assert.IsType(t, "", meta["published_at"])
 
 			assert.Equal(t, "test.test", payload["name"])
-			assert.Equal(t, msg.meta.timestamp.Format(time.RFC3339Nano), meta["timestamp"])
+			assert.Equal(t, msg.PublishedAt.UTC().Format(time.RFC3339Nano), meta["published_at"])
 
 			payloadAsJson, err := base64.StdEncoding.DecodeString(payload["payload"].(string))
 			assert.NoError(t, err)

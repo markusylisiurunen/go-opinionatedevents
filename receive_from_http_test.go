@@ -18,19 +18,19 @@ func TestReceiveFromHTTP(t *testing.T) {
 	}{
 		{
 			name:           "a valid request",
-			messageData:    `{"name":"test.test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
+			messageData:    `{"name":"test.test","meta":{"uuid":"12345","published_at":"2021-10-10T12:32:00Z"},"payload":""}`,
 			httpMethod:     "POST",
 			expectedStatus: 200,
 		},
 		{
 			name:           "an invalid payload",
-			messageData:    `{"name":"test.test","meta":{"timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
+			messageData:    `{"name":"test.test","meta":{"published_at":"2021-10-10T12:32:00Z"},"payload":""}`,
 			httpMethod:     "POST",
 			expectedStatus: 500,
 		},
 		{
 			name:           "an invalid method",
-			messageData:    `{"name":"test.test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`,
+			messageData:    `{"name":"test.test","meta":{"uuid":"12345","published_at":"2021-10-10T12:32:00Z"},"payload":""}`,
 			httpMethod:     "PUT",
 			expectedStatus: 404,
 		},
@@ -44,7 +44,7 @@ func TestReceiveFromHTTP(t *testing.T) {
 			receiver, err := NewReceiver()
 			assert.NoError(t, err)
 
-			err = receiver.On("test", "test.test", func(_ context.Context, _ string, _ *Message) Result {
+			err = receiver.On("test", "test.test", func(_ context.Context, _ string, _ Delivery) ResultContainer {
 				return SuccessResult()
 			})
 			assert.NoError(t, err)

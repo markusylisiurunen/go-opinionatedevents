@@ -104,14 +104,14 @@ func TestPostgresDestination(t *testing.T) {
 
 		tableName := "thisisthetablename"
 		columnNames := map[string]string{
-			"id":        "thecolumnname_id",
-			"name":      "thecolumnname_name",
-			"payload":   "thecolumnname_payload",
-			"queue":     "thecolumnname_queue",
-			"status":    "thecolumnname_status",
-			"timestamp": "thecolumnname_timestamp",
-			"topic":     "thecolumnname_topic",
-			"uuid":      "thecolumnname_uuid",
+			"id":           "thecolumnname_id",
+			"name":         "thecolumnname_name",
+			"payload":      "thecolumnname_payload",
+			"published_at": "thecolumnname_published_at",
+			"queue":        "thecolumnname_queue",
+			"status":       "thecolumnname_status",
+			"topic":        "thecolumnname_topic",
+			"uuid":         "thecolumnname_uuid",
 		}
 
 		destination, err := NewPostgresDestination("",

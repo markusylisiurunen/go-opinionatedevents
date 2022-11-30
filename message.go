@@ -10,15 +10,15 @@ import (
 	"github.com/google/uuid"
 )
 
-type sendableMeta struct {
-	UUID      string    `json:"uuid" validate:"required"`
-	Timestamp time.Time `json:"timestamp" validate:"required"`
+type encodedMessageMeta struct {
+	PublishedAt time.Time `json:"published_at" validate:"required"`
+	UUID        string    `json:"uuid" validate:"required"`
 }
 
-type sendable struct {
-	Name    string       `json:"name" validate:"required"`
-	Payload []byte       `json:"payload"`
-	Meta    sendableMeta `json:"meta" validate:"required"`
+type encodedMessage struct {
+	Meta    encodedMessageMeta `json:"meta" validate:"required"`
+	Name    string             `json:"name" validate:"required"`
+	Payload []byte             `json:"payload"`
 }
 
 type payloadable interface {
@@ -26,46 +26,52 @@ type payloadable interface {
 	UnmarshalPayload([]byte) error
 }
 
-type messageMeta struct {
-	uuid      string
-	timestamp time.Time
-}
-
-type messageDeliveryMeta struct {
-	attempt int
-}
-
 type Message struct {
-	name     string
-	payload  []byte
-	meta     messageMeta
-	delivery messageDeliveryMeta
-}
+	Name        string
+	PublishedAt time.Time
+	UUID        string
 
-func (m *Message) Name() string {
-	return m.name
-}
-
-func (m *Message) UUID() string {
-	return m.meta.uuid
-}
-
-func (m *Message) Timestamp() time.Time {
-	return m.meta.timestamp
+	payload []byte
 }
 
 func (msg *Message) Payload(payload payloadable) error {
 	return payload.UnmarshalPayload(msg.payload)
 }
 
-func (m *Message) MarshalJSON() ([]byte, error) {
-	return json.Marshal(
-		sendable{
-			Name:    m.name,
-			Payload: m.payload,
-			Meta:    sendableMeta{UUID: m.meta.uuid, Timestamp: m.meta.timestamp.UTC()},
-		},
-	)
+var validate *validator.Validate
+
+func getValidator() *validator.Validate {
+	if validate == nil {
+		validate = validator.New()
+	}
+	return validate
+}
+
+func (msg *Message) MarshalJSON() ([]byte, error) {
+	s := encodedMessage{
+		Meta:    encodedMessageMeta{PublishedAt: msg.PublishedAt.UTC(), UUID: msg.UUID},
+		Name:    msg.Name,
+		Payload: msg.payload,
+	}
+	if err := getValidator().Struct(&s); err != nil {
+		return nil, err
+	}
+	return json.Marshal(s)
+}
+
+func (msg *Message) UnmarshalJSON(data []byte) error {
+	var s encodedMessage
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	if err := getValidator().Struct(&s); err != nil {
+		return err
+	}
+	msg.Name = s.Name
+	msg.PublishedAt = s.Meta.PublishedAt
+	msg.UUID = s.Meta.UUID
+	msg.payload = s.Payload
+	return nil
 }
 
 func NewMessage(name string, payload payloadable) (*Message, error) {
@@ -73,42 +79,17 @@ func NewMessage(name string, payload payloadable) (*Message, error) {
 	if matched, _ := regexp.MatchString(pattern, name); !matched {
 		return nil, fmt.Errorf("name must match the pattern: %s", pattern)
 	}
-
-	message := &Message{
-		name:     name,
-		payload:  nil,
-		meta:     messageMeta{uuid: uuid.New().String(), timestamp: time.Now().UTC()},
-		delivery: messageDeliveryMeta{attempt: 0},
+	msg := &Message{
+		Name:        name,
+		PublishedAt: time.Now(),
+		UUID:        uuid.NewString(),
 	}
-
 	if payload != nil {
 		data, err := payload.MarshalPayload()
 		if err != nil {
 			return nil, err
 		}
-		message.payload = data
+		msg.payload = data
 	}
-
-	return message, nil
-}
-
-func newMessageFromSendable(data []byte, delivery messageDeliveryMeta) (*Message, error) {
-	sendable := &sendable{}
-
-	if err := json.Unmarshal(data, sendable); err != nil {
-		return nil, err
-	}
-
-	if err := validator.New().Struct(sendable); err != nil {
-		return nil, err
-	}
-
-	message := &Message{
-		name:     sendable.Name,
-		payload:  sendable.Payload,
-		meta:     messageMeta{uuid: sendable.Meta.UUID, timestamp: sendable.Meta.Timestamp},
-		delivery: delivery,
-	}
-
-	return message, nil
+	return msg, nil
 }

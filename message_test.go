@@ -17,15 +17,16 @@ func TestMessageSerialization(t *testing.T) {
 		serialized, err := message.MarshalJSON()
 		assert.NoError(t, err)
 
-		unserialized, err := newMessageFromSendable(serialized, messageDeliveryMeta{1})
+		unserialized := &Message{}
+		err = json.Unmarshal(serialized, unserialized)
 		assert.NoError(t, err)
 
-		assert.Equal(t, message.name, unserialized.name)
-		assert.Equal(t, message.meta.uuid, unserialized.meta.uuid)
+		assert.Equal(t, message.Name, unserialized.Name)
+		assert.Equal(t, message.UUID, unserialized.UUID)
 
 		assert.Equal(t,
-			message.meta.timestamp.UTC().Format(time.RFC3339),
-			unserialized.meta.timestamp.UTC().Format(time.RFC3339),
+			message.PublishedAt.UTC().Format(time.RFC3339),
+			unserialized.PublishedAt.UTC().Format(time.RFC3339),
 		)
 
 		assert.Equal(t, message.payload, unserialized.payload)
@@ -44,17 +45,18 @@ func TestMessageSerialization(t *testing.T) {
 			valid bool
 		}{
 			// valid
-			{value: `{"name":"test","meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`, valid: true},
+			{value: `{"name":"test","meta":{"uuid":"12345","published_at":"2021-10-10T12:32:00Z"},"payload":""}`, valid: true},
 			// missing name
-			{value: `{"meta":{"uuid":"12345","timestamp":"2021-10-10T12:32:00Z"},"payload":""}`, valid: false},
+			{value: `{"meta":{"uuid":"12345","published_at":"2021-10-10T12:32:00Z"},"payload":""}`, valid: false},
 			// missing uuid
-			{value: `{"name":"test","meta":{"timestamp":"2021-10-10T12:32:00Z"},"payload":""}`, valid: false},
-			// missing timestamp
+			{value: `{"name":"test","meta":{"published_at":"2021-10-10T12:32:00Z"},"payload":""}`, valid: false},
+			// missing published at
 			{value: `{"name":"test","meta":{"uuid":"12345"},"payload":""}`, valid: false},
 		}
 
 		for i, message := range messages {
-			_, err := newMessageFromSendable([]byte(message.value), messageDeliveryMeta{1})
+			unserialized := &Message{}
+			err := json.Unmarshal([]byte(message.value), unserialized)
 
 			if message.valid {
 				assert.NoError(t, err, fmt.Sprintf("error at index %d\n", i))
