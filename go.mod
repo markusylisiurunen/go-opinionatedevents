@@ -3,7 +3,7 @@ module github.com/markusylisiurunen/go-opinionatedevents
 go 1.18
 
 require (
-	cloud.google.com/go/pubsub v1.26.0
+	cloud.google.com/go/pubsub v1.27.0
 	github.com/go-playground/validator/v10 v10.11.1
 	github.com/google/uuid v1.3.0
 	github.com/lib/pq v1.10.7
@@ -34,7 +34,7 @@ require (
 	golang.org/x/text v0.4.0 // indirect
 	google.golang.org/api v0.103.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20221118155620-16455021b5e6 // indirect
+	google.golang.org/genproto v0.0.0-20221130183247-a2ec334bae6f // indirect
 	google.golang.org/grpc v1.51.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
