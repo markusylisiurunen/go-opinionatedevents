@@ -3,6 +3,7 @@ package opinionatedevents
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
 	"time"
@@ -30,23 +31,31 @@ func (p *Publisher) Publish(ctx context.Context, msg *Message) error {
 	if msg.PublishedAt.IsZero() {
 		msg.PublishedAt = time.Now()
 	}
-
 	p.inFlightWaitingGroup.Add(1)
 	envelope := p.bridge.take(ctx, msg)
-
+	if envelope.isClosed() {
+		// the envelope was closed synchronously -> handle result synchronously
+		p.inFlightWaitingGroup.Done()
+		if envelope.isClosedWith(deliveryEventFailureName) {
+			for _, handleFailure := range p.onDeliveryFailureHandlers {
+				handleFailure(msg)
+			}
+			return fmt.Errorf("error publishing a message: %#v", msg)
+		}
+		return nil
+	}
+	// the envelope will be closed asynchronously -> return nil error
 	go func() {
 		select {
 		case <-envelope.onSuccess():
 			p.inFlightWaitingGroup.Done()
 		case <-envelope.onFailure():
 			p.inFlightWaitingGroup.Done()
-
-			for _, failureHandler := range p.onDeliveryFailureHandlers {
-				failureHandler(msg)
+			for _, handleFailure := range p.onDeliveryFailureHandlers {
+				handleFailure(msg)
 			}
 		}
 	}()
-
 	return nil
 }
 
