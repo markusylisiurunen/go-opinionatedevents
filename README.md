@@ -13,9 +13,8 @@
 3. [This solution](#this-solution)
 4. [Quickstart](#quickstart)
    1. [Local](#local)
-   2. [Cloud Pub/Sub](#cloud-pubsub)
-   3. [Postgres](#postgres)
-   4. [Custom](#custom)
+   2. [Postgres](#postgres)
+   3. [Custom](#custom)
 
 ## Install
 
@@ -86,37 +85,6 @@ func GetLocalPublisher() *events.Publisher {
     // define the local destination(s) (i.e. the services you have running locally, including the current service)
     destOne := events.NewHTTPDestination("http://localhost:8080/_events/local")
     destTwo := events.NewHTTPDestination("http://localhost:8081/_events/local")
-
-    // initialise the publisher with an async bridge
-    publisher, err := events.NewPublisher(
-        events.PublisherWithAsyncBridge(10, 200, destOne, destTwo),
-    )
-    if err != nil {
-        panic(err)
-    }
-
-    return publisher
-}
-```
-
-### Cloud Pub/Sub
-
-```go
-func GetCloudPubSubPublisher() *events.Publisher {
-    // define the Cloud Pub/Sub destination to one `core` topic
-    destOne := events.NewCloudPubSubDestination("project-id", "core")
-
-    // or define a custom mapper from the message to a Cloud Pub/Sub topic
-    destTwo := events.NewPubSubDestinationWithCustomTopics(
-        "project-id",
-        func(msg *events.Message) string {
-            if strings.HasPrefix(msg.Name, "users.") {
-                return "users"
-            }
-
-            return "core"
-        },
-    )
 
     // initialise the publisher with an async bridge
     publisher, err := events.NewPublisher(
