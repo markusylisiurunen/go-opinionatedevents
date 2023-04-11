@@ -20,7 +20,7 @@ type Receiver struct {
 func (r *Receiver) Receive(ctx context.Context, queue string, delivery Delivery) ResultContainer {
 	msg := delivery.GetMessage()
 	if onMessageForQueue, ok := r.onMessage[queue]; ok {
-		if onMessageHandler, ok := onMessageForQueue[msg.Name]; ok {
+		if onMessageHandler, ok := onMessageForQueue[msg.name]; ok {
 			return onMessageHandler(ctx, queue, delivery)
 		}
 	}

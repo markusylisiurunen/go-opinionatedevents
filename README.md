@@ -164,7 +164,7 @@ func GetPostgresPublisher() *events.Publisher {
     }
 
     // make a new postgres destination
-    destination, err := events.NewPostgresDestination(connectionString,
+    destination, err := events.NewPostgresDestination(db,
         events.PostgresDestinationWithTopicToQueues("test1", "test_queue.1", "test_queue.2"),
         events.PostgresDestinationWithTopicToQueues("test2", "test_queue.1", "test_queue.2"),
 
@@ -216,7 +216,7 @@ func PublishWithTransaction(ctx context.Context, db *sql.DB) {
 type StdOutDestination struct{}
 
 func (d *StdOutDestination) Deliver(msg *events.Message) error {
-    fmt.Printf("received a message: %s\n", msg.Name)
+    fmt.Printf("received a message: %s\n", msg.GetName())
     return nil
 }
 

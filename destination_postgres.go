@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -13,7 +12,11 @@ import (
 
 type postgresContextKey string
 
-// Database connection
+const (
+	postgresContextKeyForTx postgresContextKey = postgresContextKey("tx")
+)
+
+// database connection abstractions
 // ---
 
 type sqlTx interface {
@@ -51,7 +54,7 @@ func (rdb *realDB) Begin() (sqlTx, error) {
 	return &realTX{tx: tx}, err
 }
 
-// Routing table
+// routing table to configure the topic -> {queue_1, queue_2, ...} mappings
 // ---
 
 type postgresRoutingTable struct {
@@ -64,7 +67,7 @@ func newPostgresRoutingTable() *postgresRoutingTable {
 	}
 }
 
-func (t *postgresRoutingTable) setTopicQueues(topic string, queues ...string) {
+func (t *postgresRoutingTable) appendQueuesForTopic(topic string, queues ...string) {
 	if _, ok := t.topicToQueues[topic]; ok {
 		t.topicToQueues[topic] = append(t.topicToQueues[topic], queues...)
 	} else {
@@ -72,15 +75,15 @@ func (t *postgresRoutingTable) setTopicQueues(topic string, queues ...string) {
 	}
 }
 
-func (t *postgresRoutingTable) route(topic string) []string {
+func (t *postgresRoutingTable) routeToQueues(topic string) []string {
 	if queues, ok := t.topicToQueues[topic]; ok {
 		return queues
 	}
-
 	return []string{"default"}
 }
 
-// Database schema
+// schema configuration for mapping columns to table column names
+// TODO: should be unnecessary once the library handles its own database migrations
 // ---
 
 type postgresSchemaColumn string
@@ -129,109 +132,125 @@ func (s *postgresSchema) setColumn(name postgresSchemaColumn, value string) {
 	s.columns[name] = value
 }
 
-// Transaction provider
+// transaction provider which abstracts the underlying database connection away
 // ---
-
-const (
-	postgresTransactionContextKey postgresContextKey = postgresContextKey("tx")
-)
 
 type postgresTransactionProvider struct {
 	db sqlDB
 }
 
 func newPostgresTransactionProvider(db sqlDB) *postgresTransactionProvider {
-	return &postgresTransactionProvider{
-		db: db,
-	}
+	return &postgresTransactionProvider{db: db}
 }
 
-func (tp *postgresTransactionProvider) do(ctx context.Context, action func(tx sqlTx) error) error {
+func (p *postgresTransactionProvider) do(ctx context.Context, action func(tx sqlTx) error) error {
 	var tx sqlTx
-	var commitable bool
-
-	if val, ok := ctx.Value(postgresTransactionContextKey).(sqlTx); ok {
+	var committable bool
+	if val, ok := ctx.Value(postgresContextKeyForTx).(sqlTx); ok {
+		// the context had a custom user-provided transaction, use it and never commit it on behalf of the user
 		tx = val
-		commitable = false
+		committable = false
 	} else {
-		_tx, err := tp.db.Begin()
+		// otherwise, run the action within a custom transaction
+		_tx, err := p.db.Begin()
+		defer _tx.Rollback() //nolint the error is not relevant
 		if err != nil {
 			return err
 		}
 		tx = _tx
-		commitable = true
+		committable = true
 	}
-
+	// run the actual action within the transaction, and possibly manage the transaction
 	if err := action(tx); err != nil {
-		if commitable {
+		if committable {
 			if txErr := tx.Rollback(); txErr != nil {
 				return txErr
 			}
 		}
-
 		return err
 	}
-
-	if commitable {
+	if committable {
 		if txErr := tx.Commit(); txErr != nil {
 			return txErr
 		}
 	}
-
 	return nil
 }
 
-// Destination
+// destination for postgres
 // ---
 
-type postgresDestinationOption func(d *PostgresDestination) error
-
-type PostgresDestination struct {
-	db sqlDB
-
-	tx     *postgresTransactionProvider
-	router *postgresRoutingTable
-	schema *postgresSchema
+type postgresDestination struct {
+	db         sqlDB
+	router     *postgresRoutingTable
+	schema     *postgresSchema
+	txprovider *postgresTransactionProvider
 }
 
-func NewPostgresDestination(connectionString string, options ...postgresDestinationOption) (*PostgresDestination, error) {
-	_db, err := sql.Open("postgres", connectionString)
-	if err != nil {
-		return nil, err
+type postgresDestinationOption func(dest *postgresDestination) error
+
+func PostgresDestinationWithTopicToQueues(topic string, queues ...string) postgresDestinationOption {
+	return func(d *postgresDestination) error {
+		d.router.appendQueuesForTopic(topic, queues...)
+		return nil
 	}
-	db := &realDB{db: _db}
+}
 
-	tx, router, schema := newPostgresTransactionProvider(db), newPostgresRoutingTable(), newPostgresSchema()
-	destination := &PostgresDestination{db: db, tx: tx, router: router, schema: schema}
+func PostgresDestinationWithTableName(name string) postgresDestinationOption {
+	return func(d *postgresDestination) error {
+		d.schema.setTable(name)
+		return nil
+	}
+}
 
+func PostgresDestinationWithColumnNames(names map[string]string) postgresDestinationOption {
+	return func(d *postgresDestination) error {
+		for name, value := range names {
+			key := postgresSchemaColumn(name)
+			if _, ok := d.schema.columns[key]; ok {
+				d.schema.setColumn(key, value)
+			}
+		}
+		return nil
+	}
+}
+
+func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*postgresDestination, error) {
+	// init the dependencies
+	_db := &realDB{db: db}
+	txprovider, router, schema := newPostgresTransactionProvider(_db), newPostgresRoutingTable(), newPostgresSchema()
+	// init the destination w/ options
+	dest := &postgresDestination{db: _db, router: router, schema: schema, txprovider: txprovider}
 	for _, apply := range options {
-		if err := apply(destination); err != nil {
+		if err := apply(dest); err != nil {
 			return nil, err
 		}
 	}
-
-	return destination, nil
+	return dest, nil
 }
 
-func (d *PostgresDestination) mockDB(db sqlDB) {
+func (d *postgresDestination) setDB(db sqlDB) {
 	d.db = db
-	d.tx = newPostgresTransactionProvider(db)
+	d.txprovider = newPostgresTransactionProvider(db)
 }
 
-func (d *PostgresDestination) Deliver(ctx context.Context, msg *Message) error {
+func (d *postgresDestination) Deliver(ctx context.Context, msg *Message) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-
-	topic := strings.Split(msg.Name, ".")[0]
-
-	publishedAt := msg.PublishedAt
-	uuid := msg.UUID
-
-	return d.tx.do(ctx, func(tx sqlTx) error {
-		for _, queue := range d.router.route(topic) {
-			if err := d.insertMessage(tx, topic, queue, publishedAt, uuid, msg.Name, payload); err != nil {
+	return d.txprovider.do(ctx, func(tx sqlTx) error {
+		queues := d.router.routeToQueues(msg.GetTopic())
+		for _, queue := range queues {
+			if err := d.insertMessage(&postgresDestinationInsertMessageArgs{
+				name:        msg.GetName(),
+				payload:     payload,
+				publishedAt: msg.GetPublishedAt(),
+				queue:       queue,
+				topic:       msg.GetTopic(),
+				tx:          tx,
+				uuid:        msg.GetUUID(),
+			}); err != nil {
 				return err
 			}
 		}
@@ -239,15 +258,17 @@ func (d *PostgresDestination) Deliver(ctx context.Context, msg *Message) error {
 	})
 }
 
-func (d *PostgresDestination) insertMessage(
-	tx sqlTx,
-	topic string,
-	queue string,
-	publishedAt time.Time,
-	uuid string,
-	name string,
-	payload []byte,
-) error {
+type postgresDestinationInsertMessageArgs struct {
+	name        string
+	payload     []byte
+	publishedAt time.Time
+	queue       string
+	topic       string
+	tx          sqlTx
+	uuid        string
+}
+
+func (d *postgresDestination) insertMessage(args *postgresDestinationInsertMessageArgs) error {
 	columns := fmt.Sprintf("(%s, %s, %s, %s, %s, %s, %s, %s)",
 		d.schema.columns[postgresColumnStatus],
 		d.schema.columns[postgresColumnTopic],
@@ -258,7 +279,6 @@ func (d *PostgresDestination) insertMessage(
 		d.schema.columns[postgresColumnName],
 		d.schema.columns[postgresColumnPayload],
 	)
-
 	query := fmt.Sprintf(
 		`
 		INSERT INTO %s %s
@@ -270,39 +290,11 @@ func (d *PostgresDestination) insertMessage(
 		d.schema.columns[postgresColumnQueue],
 		d.schema.columns[postgresColumnUuid],
 	)
-
-	args := []any{topic, queue, publishedAt.UTC(), publishedAt.UTC(), uuid, name, payload}
-	_, err := tx.Exec(query, args...)
-
+	execArgs := []any{args.topic, args.queue, args.publishedAt.UTC(), args.publishedAt.UTC(), args.uuid, args.name, args.payload}
+	_, err := args.tx.Exec(query, execArgs...)
 	return err
 }
 
-func PostgresDestinationWithTopicToQueues(topic string, queues ...string) postgresDestinationOption {
-	return func(d *PostgresDestination) error {
-		d.router.setTopicQueues(topic, queues...)
-		return nil
-	}
-}
-
-func PostgresDestinationWithTableName(name string) postgresDestinationOption {
-	return func(d *PostgresDestination) error {
-		d.schema.setTable(name)
-		return nil
-	}
-}
-
-func PostgresDestinationWithColumnNames(names map[string]string) postgresDestinationOption {
-	return func(d *PostgresDestination) error {
-		for name, value := range names {
-			key := postgresSchemaColumn(name)
-			if _, ok := d.schema.columns[key]; ok {
-				d.schema.setColumn(key, value)
-			}
-		}
-		return nil
-	}
-}
-
 func WithTx(ctx context.Context, tx sqlTx) context.Context {
-	return context.WithValue(ctx, postgresTransactionContextKey, tx)
+	return context.WithValue(ctx, postgresContextKeyForTx, tx)
 }

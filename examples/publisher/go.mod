@@ -6,7 +6,7 @@ replace github.com/markusylisiurunen/go-opinionatedevents => ../../
 
 require (
 	github.com/lib/pq v1.10.7
-	github.com/markusylisiurunen/go-opinionatedevents v0.1.0-beta.6
+	github.com/markusylisiurunen/go-opinionatedevents v0.1.0-beta.9
 )
 
 require (

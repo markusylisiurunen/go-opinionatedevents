@@ -15,6 +15,16 @@ type asyncBridge struct {
 	deliveryConfig *asyncBridgeDeliveryConfig
 }
 
+func newAsyncBridge(maxDeliveryAttempts int, waitBetweenAttempts int, destinations ...Destination) *asyncBridge {
+	return &asyncBridge{
+		destinations: destinations,
+		deliveryConfig: &asyncBridgeDeliveryConfig{
+			maxAttempts: maxDeliveryAttempts,
+			waitBetween: waitBetweenAttempts,
+		},
+	}
+}
+
 func (b *asyncBridge) take(ctx context.Context, msg *Message) *envelope {
 	env := newEnvelope(ctx, msg)
 	go b.deliver(env)
@@ -24,73 +34,42 @@ func (b *asyncBridge) take(ctx context.Context, msg *Message) *envelope {
 func (b *asyncBridge) deliver(envelope *envelope) {
 	destinations := b.destinations
 	attemptsLeft := b.deliveryConfig.maxAttempts
-
+	// attempt to deliver until no more attempts left
 	for attemptsLeft > 0 {
 		attemptsLeft -= 1
-
 		// try delivering the message to all (pending) destinations
-		deliveredDestinations := []int{}
-
+		deliveredTo := []int{}
 		for i, destination := range destinations {
 			if err := destination.Deliver(envelope.ctx, envelope.msg); err == nil {
-				deliveredDestinations = append(deliveredDestinations, i)
+				deliveredTo = append(deliveredTo, i)
 			}
 		}
-
 		// remove the delivered destinations from the pending list
 		tmp := []Destination{}
-
 		for i, destination := range destinations {
-			// check if this destination was successful
 			successful := false
-
-			for _, u := range deliveredDestinations {
+			for _, u := range deliveredTo {
 				if u == i {
 					successful = true
 					break
 				}
 			}
-
-			// if it was not successful, we will try again
 			if !successful {
 				tmp = append(tmp, destination)
 			}
 		}
-
 		destinations = tmp
-
+		// if there are no more pending destinations, we are done
 		if len(destinations) == 0 {
-			envelope.closeWith(
-				newDeliveryEvent(deliveryEventSuccessName),
-			)
-
+			envelope.closeWith(newDeliveryEvent(deliveryEventSuccessName))
 			break
 		}
-
+		// otherwise, possibly try again or fail with an error
 		if attemptsLeft > 0 {
 			waitFor := time.Duration(b.deliveryConfig.waitBetween)
 			time.Sleep(waitFor * time.Millisecond)
 		} else {
-			envelope.closeWith(
-				newDeliveryEvent(deliveryEventFailureName),
-			)
+			envelope.closeWith(newDeliveryEvent(deliveryEventFailureName))
 		}
 	}
-}
-
-func newAsyncBridge(
-	maxDeliveryAttempts int,
-	waitBetweenAttempts int,
-	destinations ...Destination,
-) *asyncBridge {
-	bridge := &asyncBridge{
-		destinations: destinations,
-
-		deliveryConfig: &asyncBridgeDeliveryConfig{
-			maxAttempts: maxDeliveryAttempts,
-			waitBetween: waitBetweenAttempts,
-		},
-	}
-
-	return bridge
 }
