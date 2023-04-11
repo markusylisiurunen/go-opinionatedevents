@@ -4,7 +4,7 @@ go 1.18
 
 replace github.com/markusylisiurunen/go-opinionatedevents => ../../
 
-require github.com/markusylisiurunen/go-opinionatedevents v0.1.0-beta.6
+require github.com/markusylisiurunen/go-opinionatedevents v0.1.0-beta.9
 
 require (
 	github.com/go-playground/locales v0.14.1 // indirect
