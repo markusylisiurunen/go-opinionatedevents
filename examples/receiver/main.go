@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -10,70 +11,70 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/markusylisiurunen/go-opinionatedevents"
+	events "github.com/markusylisiurunen/go-opinionatedevents"
+
+	_ "github.com/lib/pq"
 )
 
 const (
 	connectionString string = "postgres://postgres:password@localhost:6543/dev?sslmode=disable"
 )
 
-func onCustomerCreated(_ context.Context, queue string, delivery opinionatedevents.Delivery) opinionatedevents.ResultContainer {
+func onCustomerCreated(_ context.Context, delivery events.Delivery) error {
 	msg := delivery.GetMessage()
-
 	fmt.Printf("received a message: %s, %s, %s, %s\n",
-		msg.PublishedAt.Local().Format(time.RFC3339),
-		queue,
-		msg.Name,
-		msg.UUID,
+		msg.GetPublishedAt().Local().Format(time.RFC3339),
+		delivery.GetQueue(),
+		msg.GetName(),
+		msg.GetUUID(),
 	)
-
-	if strings.HasPrefix(strings.ToLower(msg.UUID), "a") {
-		err := errors.New("UUID begins with an unacceptable character")
-		return opinionatedevents.FatalResult(err)
+	if strings.HasPrefix(strings.ToLower(msg.GetUUID()), "a") {
+		return events.Fatal(errors.New("UUID begins with an unacceptable character"))
 	}
-
-	if strings.HasPrefix(strings.ToLower(msg.UUID), "b") {
-		err := errors.New("UUID begins with an unacceptable character")
-		return opinionatedevents.RetryResult(err, time.Second)
+	if strings.HasPrefix(strings.ToLower(msg.GetUUID()), "b") {
+		return errors.New("UUID begins with an unacceptable character")
 	}
-
-	return opinionatedevents.SuccessResult()
+	return nil
 }
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-
-	// make a new receiver
-	receiver, err := opinionatedevents.NewReceiver()
+	// init the database connection
+	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
 		panic(err)
 	}
-
+	// init the receiver
+	receiver, err := events.NewReceiver()
+	if err != nil {
+		panic(err)
+	}
 	// attach the handlers
 	for _, queue := range []string{"svc_1", "svc_2"} {
-		receiver.On(queue, "customers.created", opinionatedevents.WithLimit(3)(
+		receiver.On(queue, "customers.created", events.WithLimit(3)(
 			// from the 2nd attempt: 30s, 94s, 566s, 1800s, 1800s...
-			opinionatedevents.WithBackoff(opinionatedevents.ExponentialBackoff(30, 10, 2, 30*time.Minute))(
+			events.WithBackoff(events.ExponentialBackoff(30, 10, 2, 30*time.Minute))(
 				onCustomerCreated,
 			),
 		))
 	}
-
-	// attach postgres events to the receiver
-	_, err = opinionatedevents.MakeReceiveFromPostgres(ctx, receiver, connectionString,
-		opinionatedevents.ReceiveFromPostgresWithQueues("svc_1", "svc_2"), // i.e., `svc_3` will be skipped
-		opinionatedevents.ReceiveFromPostgresWithTableName("messages"),
-		opinionatedevents.ReceiveFromPostgresWithNotifyTrigger("__messages"),
-		opinionatedevents.ReceiveFromPostgresWithIntervalTrigger(1*time.Second),
+	// init the postgres source
+	postgresSource, err := events.NewPostgresSource(db,
+		events.PostgresSourceWithTableName("events"),
+		events.PostgresSourceWithQueues("svc_1", "svc_2"), // `svc_3` will be skipped
+		events.PostgresSourceWithIntervalTrigger(1*time.Second),
+		events.PostgresSourceWithNotifyTrigger(connectionString, "__events"),
 	)
 	if err != nil {
 		panic(err)
 	}
-
-	// wait for stop signal
+	// start the source
+	if err := postgresSource.Start(ctx, receiver); err != nil {
+		panic(err)
+	}
+	// wait for stop signal & stop everything
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-
 	<-sig
 	cancel()
 }

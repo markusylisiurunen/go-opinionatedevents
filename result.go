@@ -1,49 +1,41 @@
 package opinionatedevents
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"time"
+)
 
-type Result struct {
-	Err     error
-	RetryAt time.Time
-}
-
-type ResultContainer interface {
-	GetResult() *Result
-}
-
-type successResult struct{}
-
-func SuccessResult() *successResult {
-	return &successResult{}
-}
-
-func (r *successResult) GetResult() *Result {
-	var zero time.Time
-	return &Result{Err: nil, RetryAt: zero}
-}
-
-type errorResult struct {
-	err     error
+type retryError struct {
 	retryAt time.Time
+	err     error
 }
 
-func ErrorResult(err error, delay time.Duration) *errorResult {
-	return &errorResult{err: err, retryAt: time.Now().Add(delay)}
+func (f *retryError) Error() string {
+	return f.err.Error()
 }
 
-func (r *errorResult) GetResult() *Result {
-	return &Result{Err: r.err, RetryAt: r.retryAt}
+func (f *retryError) Unwrap() error {
+	return f.err
 }
 
-type fatalResult struct {
+type fatalError struct {
 	err error
 }
 
-func FatalResult(err error) *fatalResult {
-	return &fatalResult{err: err}
+func (f *fatalError) Error() string {
+	return fmt.Sprintf("fatal: %s", f.err.Error())
 }
 
-func (r *fatalResult) GetResult() *Result {
-	var zero time.Time
-	return &Result{Err: r.err, RetryAt: zero}
+func (f *fatalError) Unwrap() error {
+	return f.err
+}
+
+func Fatal(err error) error {
+	return &fatalError{err}
+}
+
+func isFatal(err error) bool {
+	var fatalErr *fatalError
+	return errors.As(err, &fatalErr)
 }

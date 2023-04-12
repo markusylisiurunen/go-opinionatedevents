@@ -11,7 +11,6 @@ import (
 
 func TestReceiver(t *testing.T) {
 	log := []string{}
-
 	tt := []struct {
 		name                  string
 		messageQueue          string
@@ -92,30 +91,29 @@ func TestReceiver(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			// reset the log
 			log = []string{}
-
+			// init the receiver and the handlers
 			receiver, err := NewReceiver()
 			assert.NoError(t, err)
-
 			for name, onMessageHandler := range tc.onMessageHandlers {
 				assert.NoError(t, receiver.On(name, tc.onMessageHandlerQueue, onMessageHandler))
 			}
-
-			delivery, err := newTestDelivery([]byte(tc.messageData), 1)
+			// attempt to create a delivery
+			delivery, err := newTestDelivery(tc.messageQueue, 1, []byte(tc.messageData))
 			if tc.errorsAfterUnmarshal {
 				assert.Error(t, err)
 				return
 			} else {
 				assert.NoError(t, err)
 			}
-
-			result := receiver.Receive(context.Background(), tc.messageQueue, delivery)
+			// attempt to receive the delivery
+			result := receiver.Deliver(context.Background(), delivery)
 			if tc.errorsAfterReceive {
-				assert.Error(t, result.GetResult().Err)
+				assert.Error(t, result)
 			} else {
-				assert.NoError(t, result.GetResult().Err)
+				assert.NoError(t, result)
 			}
-
 			assert.Len(t, log, len(tc.logAfterReceive))
 			assert.Equal(t, tc.logAfterReceive, log)
 		})
@@ -123,32 +121,35 @@ func TestReceiver(t *testing.T) {
 }
 
 func makeOnMessageHandler(name string, log *[]string, returnsErr bool) OnMessageHandler {
-	return func(_ context.Context, _ string, _ Delivery) ResultContainer {
+	return func(_ context.Context, _ Delivery) error {
 		*log = append(*log, name)
-
 		if returnsErr {
-			return FatalResult(errors.New("it failed"))
+			return Fatal(errors.New("it failed"))
 		}
-
-		return SuccessResult()
+		return nil
 	}
 }
 
 type testDelivery struct {
 	attempt int
+	queue   string
 	message *Message
 }
 
-func newTestDelivery(data []byte, attempt int) (*testDelivery, error) {
-	msg := &Message{}
-	if err := json.Unmarshal(data, msg); err != nil {
+func newTestDelivery(queue string, attempt int, data []byte) (*testDelivery, error) {
+	message := &Message{}
+	if err := json.Unmarshal(data, message); err != nil {
 		return nil, err
 	}
-	return &testDelivery{attempt: attempt, message: msg}, nil
+	return &testDelivery{attempt: attempt, queue: queue, message: message}, nil
 }
 
 func (d *testDelivery) GetAttempt() int {
 	return d.attempt
+}
+
+func (d *testDelivery) GetQueue() string {
+	return d.queue
 }
 
 func (d *testDelivery) GetMessage() *Message {

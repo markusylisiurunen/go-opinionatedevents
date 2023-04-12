@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/markusylisiurunen/go-opinionatedevents"
+	events "github.com/markusylisiurunen/go-opinionatedevents"
 
 	_ "github.com/lib/pq"
 )
@@ -13,8 +13,8 @@ const (
 	connectionString string = "postgres://postgres:password@localhost:6543/dev?sslmode=disable"
 )
 
-func publishWithoutTx(ctx context.Context, publisher *opinionatedevents.Publisher) {
-	msg, err := opinionatedevents.NewMessage("customers.created", nil)
+func publishWithoutTx(ctx context.Context, publisher *events.Publisher) {
+	msg, err := events.NewMessage("customers.created", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -23,8 +23,8 @@ func publishWithoutTx(ctx context.Context, publisher *opinionatedevents.Publishe
 	}
 }
 
-func publishWithTx(ctx context.Context, db *sql.DB, publisher *opinionatedevents.Publisher) {
-	msg, err := opinionatedevents.NewMessage("customers.created", nil)
+func publishWithTx(ctx context.Context, db *sql.DB, publisher *events.Publisher) {
+	msg, err := events.NewMessage("customers.created", nil)
 	if err != nil {
 		panic(err)
 	}
@@ -32,7 +32,7 @@ func publishWithTx(ctx context.Context, db *sql.DB, publisher *opinionatedevents
 	if err != nil {
 		panic(err)
 	}
-	if err := publisher.Publish(opinionatedevents.WithTx(ctx, tx), msg); err != nil {
+	if err := publisher.Publish(events.WithTx(ctx, tx), msg); err != nil {
 		panic(err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -48,16 +48,16 @@ func main() {
 		panic(err)
 	}
 	// init the postgres destination
-	destination, err := opinionatedevents.NewPostgresDestination(db,
-		opinionatedevents.PostgresDestinationWithTableName("events"),
-		opinionatedevents.PostgresDestinationWithTopicToQueues("customers", "svc_1", "svc_2", "svc_3"),
+	destination, err := events.NewPostgresDestination(db,
+		events.PostgresDestinationWithTableName("events"),
+		events.PostgresDestinationWithTopicToQueues("customers", "svc_1", "svc_2", "svc_3"),
 	)
 	if err != nil {
 		panic(err)
 	}
 	// init the publisher
-	publisher, err := opinionatedevents.NewPublisher(
-		opinionatedevents.PublisherWithSyncBridge(destination),
+	publisher, err := events.NewPublisher(
+		events.PublisherWithSyncBridge(destination),
 	)
 	if err != nil {
 		panic(err)
