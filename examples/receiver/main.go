@@ -22,7 +22,8 @@ const (
 
 func onCustomerCreated(_ context.Context, delivery events.Delivery) error {
 	msg := delivery.GetMessage()
-	fmt.Printf("received a message: %s, %s, %s, %s\n",
+	fmt.Printf("[%s] received a message: %s, %s, %s, %s\n",
+		time.Now().Local().Format("15:04:05"),
 		msg.GetPublishedAt().Local().Format(time.RFC3339),
 		delivery.GetQueue(),
 		msg.GetName(),
@@ -50,7 +51,7 @@ func main() {
 		panic(err)
 	}
 	// attach the handlers
-	for _, queue := range []string{"svc_1", "svc_2"} {
+	for _, queue := range []string{"svc_1", "svc_2"} { // `svc_3` will be skipped
 		receiver.On(queue, "customers.created", events.WithLimit(3)(
 			// from the 2nd attempt: 30s, 94s, 566s, 1800s, 1800s...
 			events.WithBackoff(events.ExponentialBackoff(30, 10, 2, 30*time.Minute))(
@@ -61,7 +62,6 @@ func main() {
 	// init the postgres source
 	postgresSource, err := events.NewPostgresSource(db,
 		events.PostgresSourceWithTableName("events"),
-		events.PostgresSourceWithQueues("svc_1", "svc_2"), // `svc_3` will be skipped
 		events.PostgresSourceWithIntervalTrigger(1*time.Second),
 		events.PostgresSourceWithNotifyTrigger(connectionString, "__events"),
 	)

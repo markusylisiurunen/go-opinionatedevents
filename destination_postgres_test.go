@@ -3,6 +3,7 @@ package opinionatedevents
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -141,7 +142,7 @@ func (ttx *testTx) Exec(query string, args ...any) (sql.Result, error) {
 
 func (ttx *testTx) Commit() error {
 	if ttx.commitCount+ttx.rollbackCount > 0 {
-		panic("cannot commit after commit or rollback")
+		panic(errors.New("cannot commit after commit or rollback"))
 	}
 	ttx.commitCount += 1
 	return nil

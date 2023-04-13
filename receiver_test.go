@@ -36,32 +36,6 @@ func TestReceiver(t *testing.T) {
 			},
 		},
 		{
-			name:                 "no handler registered for message name",
-			messageQueue:         "test",
-			messageData:          `{"name":"test","meta":{"uuid":"12345","published_at":"2021-10-10T12:32:00Z"},"payload":""}`,
-			logAfterReceive:      []string{},
-			errorsAfterUnmarshal: false,
-			errorsAfterReceive:   true,
-
-			onMessageHandlerQueue: "test",
-			onMessageHandlers: map[string]OnMessageHandler{
-				"unknown": makeOnMessageHandler("unknown", &log, false),
-			},
-		},
-		{
-			name:                 "no handler registered for queue",
-			messageQueue:         "test",
-			messageData:          `{"name":"test","meta":{"uuid":"12345","published_at":"2021-10-10T12:32:00Z"},"payload":""}`,
-			logAfterReceive:      []string{},
-			errorsAfterUnmarshal: false,
-			errorsAfterReceive:   true,
-
-			onMessageHandlerQueue: "unknown",
-			onMessageHandlers: map[string]OnMessageHandler{
-				"test": makeOnMessageHandler("test", &log, false),
-			},
-		},
-		{
 			name:                 "an invalid message",
 			messageQueue:         "test",
 			messageData:          `{"name":"test","meta":{"published_at":"2021-10-10T12:32:00Z"},"payload":""}`,

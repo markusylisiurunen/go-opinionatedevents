@@ -2,7 +2,6 @@ package opinionatedevents
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 
@@ -23,6 +22,24 @@ func NewReceiver() (*Receiver, error) {
 	return receiver, nil
 }
 
+func (r *Receiver) GetQueuesWithHandlers() []string {
+	result := []string{}
+	for queue := range r.onMessage {
+		result = append(result, queue)
+	}
+	return result
+}
+
+func (r *Receiver) GetMessagesWithHandlers(queue string) []string {
+	result := []string{}
+	if onMessageForQueue, ok := r.onMessage[queue]; ok {
+		for name := range onMessageForQueue {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
 func (r *Receiver) Deliver(ctx context.Context, delivery Delivery) error {
 	queue, msg := delivery.GetQueue(), delivery.GetMessage()
 	if onMessageForQueue, ok := r.onMessage[queue]; ok {
@@ -30,8 +47,11 @@ func (r *Receiver) Deliver(ctx context.Context, delivery Delivery) error {
 			return onMessageHandler(ctx, delivery)
 		}
 	}
-	// FIXME: definitely should not error messages that do not have a handler defined
-	return Fatal(errors.New("no message handler found"))
+	err := fmt.Errorf(
+		`an unexpected delivery of message "%s" from queue "%s" with no handler defined`,
+		msg.GetName(), queue,
+	)
+	panic(err)
 }
 
 func (r *Receiver) On(queue string, name string, onMessage OnMessageHandler) error {

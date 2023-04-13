@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -165,7 +166,6 @@ func (d *postgresDelivery) GetMessage() *Message {
 
 type postgresSource struct {
 	db       *sql.DB
-	queues   []string
 	receiver *Receiver
 	schema   *postgresSchema
 	triggers []postgresSourceTrigger
@@ -206,17 +206,9 @@ func PostgresSourceWithNotifyTrigger(connectionString string, channelName string
 	}
 }
 
-func PostgresSourceWithQueues(queues ...string) postgresSourceOption {
-	return func(source *postgresSource) error {
-		source.queues = queues
-		return nil
-	}
-}
-
 func NewPostgresSource(db *sql.DB, options ...postgresSourceOption) (*postgresSource, error) {
 	source := &postgresSource{
 		db:       db,
-		queues:   []string{},
 		schema:   newPostgresSchema(),
 		triggers: []postgresSourceTrigger{},
 	}
@@ -284,13 +276,18 @@ func (s *postgresSource) processUntilNoneLeft() error {
 	// limit the number of processed messages to `n`
 	foundMaxLimit, foundCount := 500, 0
 	// process the pending messages one by one, in a transaction
-	visited := []int64{}
+	visitedMessageIds := []int64{}
+	nonEmptyQueues := append([]string{}, s.receiver.GetQueuesWithHandlers()...)
 	for {
 		tx, err := s.db.Begin()
 		if err != nil {
 			return err
 		}
-		id, err := s.processNextMessage(tx, visited)
+		// pick a random non-empty queue to pull messages from
+		selectedQueue := nonEmptyQueues[rand.Intn(len(nonEmptyQueues))]
+		messagesWithHandlers := s.receiver.GetMessagesWithHandlers(selectedQueue)
+		// attempt to process the next available message from the queue
+		id, err := s.processNextMessage(tx, []string{selectedQueue}, messagesWithHandlers, visitedMessageIds)
 		if err != nil {
 			// a non-nil error means that something very unexpected (e.g. network down) happened -> rollback
 			if err := tx.Rollback(); err != nil {
@@ -304,18 +301,29 @@ func (s *postgresSource) processUntilNoneLeft() error {
 		// an id of -1 means that there was no pending messages left
 		found := id > -1
 		if found {
-			visited = append(visited, id)
+			visitedMessageIds = append(visitedMessageIds, id)
 			foundCount += 1
+		} else {
+			nonEmptyQueues = filter(nonEmptyQueues, func(item string, _ int) bool {
+				return item != selectedQueue
+			})
 		}
-		canProcessNext := foundCount < foundMaxLimit
-		if !found || !canProcessNext {
+		// check if there are possibly more pending messages
+		isBelowLimit := foundCount < foundMaxLimit
+		hasNonEmptyQueues := len(nonEmptyQueues) > 0
+		if !(isBelowLimit && hasNonEmptyQueues) {
 			break
 		}
 	}
 	return nil
 }
 
-func (s *postgresSource) processNextMessage(tx *sql.Tx, visited []int64) (int64, error) {
+func (s *postgresSource) processNextMessage(
+	tx *sql.Tx,
+	queuesToPullFrom []string,
+	messagesWithHandlers []string,
+	visitedMessageIds []int64,
+) (int64, error) {
 	selectQuery := fmt.Sprintf(
 		`
 		SELECT %s, %s, %s, %s, %s
@@ -323,8 +331,9 @@ func (s *postgresSource) processNextMessage(tx *sql.Tx, visited []int64) (int64,
 		WHERE
 			%s = 'pending' AND
 			%s = ANY($1) AND
-			NOT (%s = ANY($2)) AND
-			%s <= $3
+			%s = ANY($2) AND
+			NOT (%s = ANY($3)) AND
+			%s <= $4
 		ORDER BY %s ASC
 		LIMIT 1
 		FOR UPDATE SKIP LOCKED
@@ -337,6 +346,7 @@ func (s *postgresSource) processNextMessage(tx *sql.Tx, visited []int64) (int64,
 		s.schema.table,
 		s.schema.columns[postgresColumnStatus],
 		s.schema.columns[postgresColumnQueue],
+		s.schema.columns[postgresColumnName],
 		s.schema.columns[postgresColumnId],
 		s.schema.columns[postgresColumnDeliverAt],
 		s.schema.columns[postgresColumnPublishedAt],
@@ -364,7 +374,12 @@ func (s *postgresSource) processNextMessage(tx *sql.Tx, visited []int64) (int64,
 		s.schema.columns[postgresColumnUuid],
 	)
 	// attempt to fetch the next pending message from the database
-	row := tx.QueryRow(selectQuery, pq.Array(s.queues), pq.Array(visited), time.Now().UTC())
+	row := tx.QueryRow(selectQuery,
+		pq.Array(queuesToPullFrom),
+		pq.Array(messagesWithHandlers),
+		pq.Array(visitedMessageIds),
+		time.Now().UTC(),
+	)
 	var id int64
 	var uuid string
 	var queue string

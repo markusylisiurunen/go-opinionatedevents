@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"database/sql"
+	"flag"
+	"math/rand"
 
 	events "github.com/markusylisiurunen/go-opinionatedevents"
 
@@ -42,6 +44,10 @@ func publishWithTx(ctx context.Context, db *sql.DB, publisher *events.Publisher)
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
+	// read in the count
+	var count int
+	flag.IntVar(&count, "count", 1, "the number of messages to publish")
+	flag.Parse()
 	// init the database connection
 	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
@@ -62,9 +68,14 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	// publish the messages
-	publishWithoutTx(ctx, publisher)
-	publishWithTx(ctx, db, publisher)
+	// publish the message
+	for i := 0; i < count; i += 1 {
+		if rand.Float64() < 0.5 {
+			publishWithoutTx(ctx, publisher)
+		} else {
+			publishWithTx(ctx, db, publisher)
+		}
+	}
 	// cancel the context
 	cancel()
 }
