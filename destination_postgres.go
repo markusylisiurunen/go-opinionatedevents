@@ -181,13 +181,21 @@ func (p *postgresTransactionProvider) do(ctx context.Context, action func(tx sql
 // ---
 
 type postgresDestination struct {
-	db         sqlDB
-	router     *postgresRoutingTable
-	schema     *postgresSchema
-	txprovider *postgresTransactionProvider
+	db                sqlDB
+	router            *postgresRoutingTable
+	schemaForColumns  *postgresSchema
+	schemaForPostgres string
+	txprovider        *postgresTransactionProvider
 }
 
 type postgresDestinationOption func(dest *postgresDestination) error
+
+func PostgresDestinationWithSchema(schema string) postgresDestinationOption {
+	return func(d *postgresDestination) error {
+		d.schemaForPostgres = schema
+		return nil
+	}
+}
 
 func PostgresDestinationWithTopicToQueues(topic string, queues ...string) postgresDestinationOption {
 	return func(d *postgresDestination) error {
@@ -198,7 +206,7 @@ func PostgresDestinationWithTopicToQueues(topic string, queues ...string) postgr
 
 func PostgresDestinationWithTableName(name string) postgresDestinationOption {
 	return func(d *postgresDestination) error {
-		d.schema.setTable(name)
+		d.schemaForColumns.setTable(name)
 		return nil
 	}
 }
@@ -207,8 +215,8 @@ func PostgresDestinationWithColumnNames(names map[string]string) postgresDestina
 	return func(d *postgresDestination) error {
 		for name, value := range names {
 			key := postgresSchemaColumn(name)
-			if _, ok := d.schema.columns[key]; ok {
-				d.schema.setColumn(key, value)
+			if _, ok := d.schemaForColumns.columns[key]; ok {
+				d.schemaForColumns.setColumn(key, value)
 			}
 		}
 		return nil
@@ -218,15 +226,25 @@ func PostgresDestinationWithColumnNames(names map[string]string) postgresDestina
 func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*postgresDestination, error) {
 	// init the dependencies
 	_db := &realDB{db: db}
-	txprovider, router, schema := newPostgresTransactionProvider(_db), newPostgresRoutingTable(), newPostgresSchema()
+	txprovider, router := newPostgresTransactionProvider(_db), newPostgresRoutingTable()
 	// init the destination w/ options
-	dest := &postgresDestination{db: _db, router: router, schema: schema, txprovider: txprovider}
+	destination := &postgresDestination{
+		db:                _db,
+		router:            router,
+		schemaForColumns:  newPostgresSchema(),
+		schemaForPostgres: "opinionatedevents",
+		txprovider:        txprovider,
+	}
 	for _, apply := range options {
-		if err := apply(dest); err != nil {
+		if err := apply(destination); err != nil {
 			return nil, err
 		}
 	}
-	return dest, nil
+	// make sure the migrations are run
+	if err := migrate(db, destination.schemaForPostgres); err != nil {
+		return nil, err
+	}
+	return destination, nil
 }
 
 func (d *postgresDestination) setDB(db sqlDB) {
@@ -270,25 +288,26 @@ type postgresDestinationInsertMessageArgs struct {
 
 func (d *postgresDestination) insertMessage(args *postgresDestinationInsertMessageArgs) error {
 	columns := fmt.Sprintf("(%s, %s, %s, %s, %s, %s, %s, %s)",
-		d.schema.columns[postgresColumnStatus],
-		d.schema.columns[postgresColumnTopic],
-		d.schema.columns[postgresColumnQueue],
-		d.schema.columns[postgresColumnPublishedAt],
-		d.schema.columns[postgresColumnDeliverAt],
-		d.schema.columns[postgresColumnUuid],
-		d.schema.columns[postgresColumnName],
-		d.schema.columns[postgresColumnPayload],
+		d.schemaForColumns.columns[postgresColumnStatus],
+		d.schemaForColumns.columns[postgresColumnTopic],
+		d.schemaForColumns.columns[postgresColumnQueue],
+		d.schemaForColumns.columns[postgresColumnPublishedAt],
+		d.schemaForColumns.columns[postgresColumnDeliverAt],
+		d.schemaForColumns.columns[postgresColumnUuid],
+		d.schemaForColumns.columns[postgresColumnName],
+		d.schemaForColumns.columns[postgresColumnPayload],
 	)
 	query := fmt.Sprintf(
 		`
-		INSERT INTO %s %s
+		INSERT INTO %s.%s %s
 		VALUES ('pending', $1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (%s, %s) DO NOTHING
 		`,
-		d.schema.table,
+		d.schemaForPostgres,
+		d.schemaForColumns.table,
 		columns,
-		d.schema.columns[postgresColumnQueue],
-		d.schema.columns[postgresColumnUuid],
+		d.schemaForColumns.columns[postgresColumnQueue],
+		d.schemaForColumns.columns[postgresColumnUuid],
 	)
 	execArgs := []any{args.topic, args.queue, args.publishedAt.UTC(), args.publishedAt.UTC(), args.uuid, args.name, args.payload}
 	_, err := args.tx.Exec(query, execArgs...)
