@@ -1,6 +1,6 @@
 module github.com/markusylisiurunen/go-opinionatedevents/examples/receiver
 
-go 1.18
+go 1.20
 
 replace github.com/markusylisiurunen/go-opinionatedevents => ../../
 

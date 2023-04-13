@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   postgres:
-    image: postgres:13
+    image: postgres:15
     restart: always
     environment:
       POSTGRES_DB: dev
