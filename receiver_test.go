@@ -73,6 +73,7 @@ func TestReceiver(t *testing.T) {
 			for name, onMessageHandler := range tc.onMessageHandlers {
 				assert.NoError(t, receiver.On(name, tc.onMessageHandlerQueue, onMessageHandler))
 			}
+			assert.NoError(t, receiver.Start(context.Background()))
 			// attempt to create a delivery
 			delivery, err := newTestDelivery(tc.messageQueue, 1, []byte(tc.messageData))
 			if tc.errorsAfterUnmarshal {

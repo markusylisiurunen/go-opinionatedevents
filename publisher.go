@@ -46,20 +46,20 @@ func PublisherWithAsyncBridge(
 }
 
 func NewPublisher(opts ...publisherOption) (*Publisher, error) {
-	p := &Publisher{
+	publisher := &Publisher{
 		bridge:                    nil,
 		inFlightWaitingGroup:      sync.WaitGroup{},
 		onDeliveryFailureHandlers: []*onDeliveryFailureHandler{},
 	}
 	for _, apply := range opts {
-		if err := apply(p); err != nil {
+		if err := apply(publisher); err != nil {
 			return nil, err
 		}
 	}
-	if p.bridge == nil {
+	if publisher.bridge == nil {
 		return nil, errors.New("publisher bridge was not configured")
 	}
-	return p, nil
+	return publisher, nil
 }
 
 func (p *Publisher) OnDeliveryFailure(handler func(msg *Message)) func() {

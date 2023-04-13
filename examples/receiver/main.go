@@ -45,8 +45,19 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	// init the postgres source
+	postgresSource, err := events.NewPostgresSource(db,
+		events.PostgresSourceWithTableName("events"),
+		events.PostgresSourceWithIntervalTrigger(1*time.Second),
+		events.PostgresSourceWithNotifyTrigger(connectionString, "__events"),
+	)
+	if err != nil {
+		panic(err)
+	}
 	// init the receiver
-	receiver, err := events.NewReceiver()
+	receiver, err := events.NewReceiver(
+		events.ReceiverWithSource(postgresSource),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -59,17 +70,8 @@ func main() {
 			),
 		))
 	}
-	// init the postgres source
-	postgresSource, err := events.NewPostgresSource(db,
-		events.PostgresSourceWithTableName("events"),
-		events.PostgresSourceWithIntervalTrigger(1*time.Second),
-		events.PostgresSourceWithNotifyTrigger(connectionString, "__events"),
-	)
-	if err != nil {
-		panic(err)
-	}
-	// start the source
-	if err := postgresSource.Start(ctx, receiver); err != nil {
+	// start receiving
+	if err := receiver.Start(ctx); err != nil {
 		panic(err)
 	}
 	// wait for stop signal & stop everything

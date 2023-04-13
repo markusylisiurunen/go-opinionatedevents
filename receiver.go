@@ -2,6 +2,7 @@ package opinionatedevents
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -14,12 +15,45 @@ type Delivery interface {
 type OnMessageHandler func(ctx context.Context, delivery Delivery) error
 
 type Receiver struct {
+	started   bool
+	sources   []Source
 	onMessage map[string]map[string]OnMessageHandler
 }
 
-func NewReceiver() (*Receiver, error) {
-	receiver := &Receiver{onMessage: map[string]map[string]OnMessageHandler{}}
+type receiverOption func(r *Receiver) error
+
+func ReceiverWithSource(source Source) receiverOption {
+	return func(r *Receiver) error {
+		r.sources = append(r.sources, source)
+		return nil
+	}
+}
+
+func NewReceiver(opts ...receiverOption) (*Receiver, error) {
+	receiver := &Receiver{
+		started:   false,
+		sources:   []Source{},
+		onMessage: map[string]map[string]OnMessageHandler{},
+	}
+	for _, apply := range opts {
+		if err := apply(receiver); err != nil {
+			return nil, err
+		}
+	}
 	return receiver, nil
+}
+
+func (r *Receiver) Start(ctx context.Context) error {
+	if r.started {
+		return errors.New("cannot start the receiver more than once")
+	}
+	r.started = true
+	for _, source := range r.sources {
+		if err := source.Start(ctx, r); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Receiver) GetQueuesWithHandlers() []string {
@@ -41,6 +75,9 @@ func (r *Receiver) GetMessagesWithHandlers(queue string) []string {
 }
 
 func (r *Receiver) Deliver(ctx context.Context, delivery Delivery) error {
+	if !r.started {
+		panic(fmt.Errorf(`an unexpected delivery before the receiver was started`))
+	}
 	queue, msg := delivery.GetQueue(), delivery.GetMessage()
 	if onMessageForQueue, ok := r.onMessage[queue]; ok {
 		if onMessageHandler, ok := onMessageForQueue[msg.name]; ok {
