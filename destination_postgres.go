@@ -185,6 +185,7 @@ type postgresDestination struct {
 	router            *postgresRoutingTable
 	schemaForColumns  *postgresSchema
 	schemaForPostgres string
+	skipMigrations    bool
 	txprovider        *postgresTransactionProvider
 }
 
@@ -233,6 +234,7 @@ func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*
 		router:            router,
 		schemaForColumns:  newPostgresSchema(),
 		schemaForPostgres: "opinionatedevents",
+		skipMigrations:    false,
 		txprovider:        txprovider,
 	}
 	for _, apply := range options {
@@ -241,8 +243,10 @@ func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*
 		}
 	}
 	// make sure the migrations are run
-	if err := migrate(db, destination.schemaForPostgres); err != nil {
-		return nil, err
+	if !destination.skipMigrations {
+		if err := migrate(db, destination.schemaForPostgres); err != nil {
+			return nil, err
+		}
 	}
 	return destination, nil
 }

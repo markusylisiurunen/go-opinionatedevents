@@ -12,7 +12,7 @@ import (
 func TestPostgresDestination(t *testing.T) {
 	t.Run("inserts an event to the database", func(t *testing.T) {
 		db := &testDB{}
-		destination, err := NewPostgresDestination(nil)
+		destination, err := NewPostgresDestination(nil, skipMigrations())
 		assert.NoError(t, err)
 		destination.setDB(db)
 		for i := 0; i < 3; i += 1 {
@@ -33,7 +33,7 @@ func TestPostgresDestination(t *testing.T) {
 
 	t.Run("uses the provided transaction from context", func(t *testing.T) {
 		db := &testDB{}
-		destination, err := NewPostgresDestination(nil)
+		destination, err := NewPostgresDestination(nil, skipMigrations())
 		assert.NoError(t, err)
 		destination.setDB(db)
 		newDB := &testDB{}
@@ -62,6 +62,7 @@ func TestPostgresDestination(t *testing.T) {
 	t.Run("messages to all queues are sent in one transaction", func(t *testing.T) {
 		db := &testDB{}
 		destination, err := NewPostgresDestination(nil,
+			skipMigrations(),
 			PostgresDestinationWithTopicToQueues("customers", "topic.1", "topic.2"),
 		)
 		assert.NoError(t, err)
@@ -94,6 +95,7 @@ func TestPostgresDestination(t *testing.T) {
 			"uuid":         "thecolumnname_uuid",
 		}
 		destination, err := NewPostgresDestination(nil,
+			skipMigrations(),
 			PostgresDestinationWithTopicToQueues("customers", "topic.1", "topic.2"),
 			PostgresDestinationWithTableName(tableName),
 			PostgresDestinationWithColumnNames(columnNames),
@@ -124,6 +126,13 @@ func TestPostgresDestination(t *testing.T) {
 			assert.Contains(t, query, columnName)
 		}
 	})
+}
+
+func skipMigrations() postgresDestinationOption {
+	return func(dest *postgresDestination) error {
+		dest.skipMigrations = true
+		return nil
+	}
 }
 
 type testTx struct {

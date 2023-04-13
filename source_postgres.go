@@ -169,6 +169,7 @@ type postgresSource struct {
 	receiver          *Receiver
 	schemaForColumns  *postgresSchema
 	schemaForPostgres string
+	skipMigrations    bool
 	triggers          []postgresSourceTrigger
 }
 
@@ -219,6 +220,7 @@ func NewPostgresSource(db *sql.DB, options ...postgresSourceOption) (*postgresSo
 		db:                db,
 		schemaForColumns:  newPostgresSchema(),
 		schemaForPostgres: "opinionatedevents",
+		skipMigrations:    false,
 		triggers:          []postgresSourceTrigger{},
 	}
 	for _, apply := range options {
@@ -231,8 +233,10 @@ func NewPostgresSource(db *sql.DB, options ...postgresSourceOption) (*postgresSo
 		source.triggers = append(source.triggers, newPostgresSourceIntervalTrigger(5*time.Second))
 	}
 	// make sure the migrations are run
-	if err := migrate(db, source.schemaForPostgres); err != nil {
-		return nil, err
+	if !source.skipMigrations {
+		if err := migrate(db, source.schemaForPostgres); err != nil {
+			return nil, err
+		}
 	}
 	return source, nil
 }
