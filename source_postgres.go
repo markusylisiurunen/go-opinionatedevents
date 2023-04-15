@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lib/pq"
@@ -37,6 +38,7 @@ func (t *postgresSourceIntervalTrigger) Start(ctx context.Context) (chan struct{
 		for {
 			select {
 			case <-ctx.Done():
+				close(c)
 				return
 			case <-time.After(t.interval):
 				c <- struct{}{}
@@ -84,6 +86,7 @@ func (t *postgresSourceNotifyTrigger) Start(ctx context.Context) (chan struct{},
 			select {
 			case <-ctx.Done():
 				listener.Close()
+				close(c)
 				return
 			case <-time.After(30 * time.Second):
 				if err := listener.Ping(); err != nil {
@@ -111,25 +114,30 @@ func newPostgresSourceAggregateTrigger(triggers ...postgresSourceTrigger) *postg
 }
 
 func (t *postgresSourceAggregateTrigger) Start(ctx context.Context) (chan struct{}, error) {
-	c := make(chan struct{})
+	out := make(chan struct{})
+	var closed atomic.Bool
+	// close the out channel when the context is done
+	go func(ctx context.Context) {
+		<-ctx.Done()
+		closed.Store(true)
+		close(out)
+	}(ctx)
+	// aggregate the triggers
 	for _, trigger := range t.triggers {
-		ch, err := trigger.Start(ctx)
+		in, err := trigger.Start(ctx)
 		if err != nil {
 			// TODO: what happens to the previously started listeners...? they should be closed?
 			return nil, err
 		}
-		go func(ctx context.Context, ch chan struct{}) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ch:
-					c <- struct{}{}
+		go func(in <-chan struct{}) {
+			for val := range in {
+				if !closed.Load() {
+					out <- val
 				}
 			}
-		}(ctx, ch)
+		}(in)
 	}
-	return c, nil
+	return out, nil
 }
 
 // postgres delivery
@@ -166,6 +174,7 @@ func (d *postgresDelivery) GetMessage() *Message {
 
 type postgresSource struct {
 	db                *sql.DB
+	maxWorkers        int
 	receiver          *Receiver
 	schemaForColumns  *postgresSchema
 	schemaForPostgres string
@@ -174,6 +183,13 @@ type postgresSource struct {
 }
 
 type postgresSourceOption func(source *postgresSource) error
+
+func PostgresSourceWithMaxWorkers(maxWorkers uint) postgresSourceOption {
+	return func(source *postgresSource) error {
+		source.maxWorkers = int(maxWorkers)
+		return nil
+	}
+}
 
 func PostgresSourceWithSchema(schema string) postgresSourceOption {
 	return func(source *postgresSource) error {
@@ -218,6 +234,7 @@ func PostgresSourceWithNotifyTrigger(connectionString string, channelName string
 func NewPostgresSource(db *sql.DB, options ...postgresSourceOption) (*postgresSource, error) {
 	source := &postgresSource{
 		db:                db,
+		maxWorkers:        8,
 		schemaForColumns:  newPostgresSchema(),
 		schemaForPostgres: "opinionatedevents",
 		skipMigrations:    false,
@@ -248,44 +265,69 @@ func (s *postgresSource) Start(ctx context.Context, receiver *Receiver) error {
 	s.receiver = receiver
 	// create and start an aggregate trigger
 	trigger := newPostgresSourceAggregateTrigger(s.triggers...)
-	c, err := trigger.Start(ctx)
+	triggerChan, err := trigger.Start(ctx)
 	if err != nil {
 		return err
 	}
-	// start reacting to triggers
-	go func(ctx context.Context) {
-		var mutex sync.Mutex
-		processing := false
+	// fan-out the triggers to worker triggers
+	workerTriggerChans := make([]chan struct{}, s.maxWorkers)
+	for i := range workerTriggerChans {
+		workerTriggerChans[i] = make(chan struct{})
+	}
+	go func() {
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-c:
-				mutex.Lock()
-				if processing {
-					// we were already processing pending messages, just skip the trigger
-					mutex.Unlock()
-					continue
+			val, ok := <-triggerChan
+			for _, out := range workerTriggerChans {
+				if !ok {
+					close(out)
+				} else {
+					out <- val
 				}
-				// start processing pending messages from this trigger
-				processing = true
-				mutex.Unlock()
-				// process in a goroutine so that the triggers are not blocked
-				go func() {
-					defer func() {
-						mutex.Lock()
-						processing = false
-						mutex.Unlock()
-					}()
-					if err := s.processUntilNoneLeft(); err != nil {
-						// TODO: the errored messages will be retried on next trigger, but should log somehow
-						goto outside
-					}
-				outside:
-				}()
+			}
+			if !ok {
+				break
 			}
 		}
-	}(ctx)
+	}()
+	// launch the workers
+	for i := 0; i < s.maxWorkers; i += 1 {
+		go func(ctx context.Context, trigger chan struct{}) {
+			var mutex sync.Mutex
+			processing := false
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case _, ok := <-trigger:
+					if !ok {
+						return
+					}
+					mutex.Lock()
+					if processing {
+						// we were already processing pending messages, just skip the trigger
+						mutex.Unlock()
+						continue
+					}
+					// start processing pending messages from this trigger
+					processing = true
+					mutex.Unlock()
+					// process in a goroutine so that the triggers are not blocked
+					go func() {
+						defer func() {
+							mutex.Lock()
+							processing = false
+							mutex.Unlock()
+						}()
+						if err := s.processUntilNoneLeft(); err != nil {
+							// TODO: the errored messages will be retried on next trigger, but should log somehow
+							goto outside
+						}
+					outside:
+					}()
+				}
+			}
+		}(ctx, workerTriggerChans[i])
+	}
 	return nil
 }
 
