@@ -115,13 +115,7 @@ func newPostgresSourceAggregateTrigger(triggers ...postgresSourceTrigger) *postg
 
 func (t *postgresSourceAggregateTrigger) Start(ctx context.Context) (chan struct{}, error) {
 	out := make(chan struct{})
-	var closed atomic.Bool
-	// close the out channel when the context is done
-	go func(ctx context.Context) {
-		<-ctx.Done()
-		closed.Store(true)
-		close(out)
-	}(ctx)
+	var running atomic.Int32
 	// aggregate the triggers
 	for _, trigger := range t.triggers {
 		in, err := trigger.Start(ctx)
@@ -129,13 +123,18 @@ func (t *postgresSourceAggregateTrigger) Start(ctx context.Context) (chan struct
 			// TODO: what happens to the previously started listeners...? they should be closed?
 			return nil, err
 		}
-		go func(in <-chan struct{}) {
-			for val := range in {
-				if !closed.Load() {
-					out <- val
+		running.Add(1)
+		go func(in chan struct{}, out chan struct{}) {
+			defer func() {
+				running.Add(-1)
+				if running.Load() == 0 {
+					close(out)
 				}
+			}()
+			for val := range in {
+				out <- val
 			}
-		}(in)
+		}(in, out)
 	}
 	return out, nil
 }
