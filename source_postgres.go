@@ -172,46 +172,26 @@ func (d *postgresDelivery) GetMessage() *Message {
 // ---
 
 type postgresSource struct {
-	db                *sql.DB
-	maxWorkers        int
-	receiver          *Receiver
-	schemaForColumns  *postgresSchema
-	schemaForPostgres string
-	skipMigrations    bool
-	triggers          []postgresSourceTrigger
+	db             *sql.DB
+	maxWorkers     int
+	receiver       *Receiver
+	schema         string
+	skipMigrations bool
+	triggers       []postgresSourceTrigger
 }
 
 type postgresSourceOption func(source *postgresSource) error
 
+func PostgresSourceWithSchema(schema string) postgresSourceOption {
+	return func(source *postgresSource) error {
+		source.schema = schema
+		return nil
+	}
+}
+
 func PostgresSourceWithMaxWorkers(maxWorkers uint) postgresSourceOption {
 	return func(source *postgresSource) error {
 		source.maxWorkers = int(maxWorkers)
-		return nil
-	}
-}
-
-func PostgresSourceWithSchema(schema string) postgresSourceOption {
-	return func(source *postgresSource) error {
-		source.schemaForPostgres = schema
-		return nil
-	}
-}
-
-func PostgresSourceWithTableName(tableName string) postgresSourceOption {
-	return func(source *postgresSource) error {
-		source.schemaForColumns.setTable(tableName)
-		return nil
-	}
-}
-
-func PostgresSourceWithColumnNames(columns map[string]string) postgresSourceOption {
-	return func(source *postgresSource) error {
-		for name, value := range columns {
-			key := postgresSchemaColumn(name)
-			if _, ok := source.schemaForColumns.columns[key]; ok {
-				source.schemaForColumns.setColumn(key, value)
-			}
-		}
 		return nil
 	}
 }
@@ -223,21 +203,20 @@ func PostgresSourceWithIntervalTrigger(interval time.Duration) postgresSourceOpt
 	}
 }
 
-func PostgresSourceWithNotifyTrigger(connectionString string, channelName string) postgresSourceOption {
+func PostgresSourceWithNotifyTrigger(connectionString string) postgresSourceOption {
 	return func(source *postgresSource) error {
-		source.triggers = append(source.triggers, newPostgresSourceNotifyTrigger(connectionString, channelName))
+		source.triggers = append(source.triggers, newPostgresSourceNotifyTrigger(connectionString, "__events"))
 		return nil
 	}
 }
 
 func NewPostgresSource(db *sql.DB, options ...postgresSourceOption) (*postgresSource, error) {
 	source := &postgresSource{
-		db:                db,
-		maxWorkers:        8,
-		schemaForColumns:  newPostgresSchema(),
-		schemaForPostgres: "opinionatedevents",
-		skipMigrations:    false,
-		triggers:          []postgresSourceTrigger{},
+		db:             db,
+		maxWorkers:     8,
+		schema:         "opinionatedevents",
+		skipMigrations: false,
+		triggers:       []postgresSourceTrigger{},
 	}
 	for _, apply := range options {
 		if err := apply(source); err != nil {
@@ -250,7 +229,7 @@ func NewPostgresSource(db *sql.DB, options ...postgresSourceOption) (*postgresSo
 	}
 	// make sure the migrations are run
 	if !source.skipMigrations {
-		if err := migrate(db, source.schemaForPostgres); err != nil {
+		if err := migrate(db, source.schema); err != nil {
 			return nil, err
 		}
 	}
@@ -382,62 +361,49 @@ func (s *postgresSource) processNextMessage(
 	messagesWithHandlers []string,
 	visitedMessageIds []int64,
 ) (int64, error) {
-	// FIXME: these queries should probably be rewritten with only the schema as the variable...
-	selectQuery := fmt.Sprintf(
+	// define the required SQL queries
+	selectNextEventQuery := withSchema(
 		`
-		SELECT %s, %s, %s, %s, %s
-		FROM %s.%s
+		SELECT id, uuid, queue, payload, delivery_attempts
+		FROM :SCHEMA.events
 		WHERE
-			%s = 'pending' AND
-			%s = ANY($1) AND
-			%s = ANY($2) AND
-			NOT (%s = ANY($3)) AND
-			%s <= $4
-		ORDER BY %s ASC
+			status = 'pending' AND
+			queue = ANY($1) AND
+			name = ANY($2) AND
+			NOT (id = ANY($3)) AND
+			deliver_at <= $4
+		ORDER BY published_at ASC
 		LIMIT 1
 		FOR UPDATE SKIP LOCKED
 		`,
-		s.schemaForColumns.columns[postgresColumnId],
-		s.schemaForColumns.columns[postgresColumnUuid],
-		s.schemaForColumns.columns[postgresColumnQueue],
-		s.schemaForColumns.columns[postgresColumnPayload],
-		s.schemaForColumns.columns[postgresColumnDeliveryAttempts],
-		s.schemaForPostgres,
-		s.schemaForColumns.table,
-		s.schemaForColumns.columns[postgresColumnStatus],
-		s.schemaForColumns.columns[postgresColumnQueue],
-		s.schemaForColumns.columns[postgresColumnName],
-		s.schemaForColumns.columns[postgresColumnId],
-		s.schemaForColumns.columns[postgresColumnDeliverAt],
-		s.schemaForColumns.columns[postgresColumnPublishedAt],
+		s.schema,
 	)
-	statusQuery := fmt.Sprintf(
-		`UPDATE %s.%s SET %s = $1 WHERE %s = $2 AND %s = $3`,
-		s.schemaForPostgres,
-		s.schemaForColumns.table,
-		s.schemaForColumns.columns[postgresColumnStatus],
-		s.schemaForColumns.columns[postgresColumnQueue],
-		s.schemaForColumns.columns[postgresColumnUuid],
+	updateStatusQuery := withSchema(
+		`
+		UPDATE :SCHEMA.events
+		SET status = $1
+		WHERE queue = $2 AND uuid = $3
+		`,
+		s.schema,
 	)
-	incrementDeliveryAttemptsQuery := fmt.Sprintf(
-		`UPDATE %s.%s SET %s = %s + 1 WHERE %s = $1 AND %s = $2`,
-		s.schemaForPostgres,
-		s.schemaForColumns.table,
-		s.schemaForColumns.columns[postgresColumnDeliveryAttempts],
-		s.schemaForColumns.columns[postgresColumnDeliveryAttempts],
-		s.schemaForColumns.columns[postgresColumnQueue],
-		s.schemaForColumns.columns[postgresColumnUuid],
+	incrementDeliveryAttemptsQuery := withSchema(
+		`
+		UPDATE :SCHEMA.events
+		SET delivery_attempts = delivery_attempts + 1
+		WHERE queue = $1 AND uuid = $2
+		`,
+		s.schema,
 	)
-	deliverAtQuery := fmt.Sprintf(
-		`UPDATE %s.%s SET %s = $1 WHERE %s = $2 AND %s = $3`,
-		s.schemaForPostgres,
-		s.schemaForColumns.table,
-		s.schemaForColumns.columns[postgresColumnDeliverAt],
-		s.schemaForColumns.columns[postgresColumnQueue],
-		s.schemaForColumns.columns[postgresColumnUuid],
+	updateDeliverAtQuery := withSchema(
+		`
+		UPDATE :SCHEMA.events
+		SET deliver_at = $1
+		WHERE queue = $2 AND uuid = $3
+		`,
+		s.schema,
 	)
 	// attempt to fetch the next pending message from the database
-	row := tx.QueryRow(selectQuery,
+	row := tx.QueryRow(selectNextEventQuery,
 		pq.Array(queuesToPullFrom),
 		pq.Array(messagesWithHandlers),
 		pq.Array(visitedMessageIds),
@@ -475,7 +441,7 @@ func (s *postgresSource) processNextMessage(
 	// check if the result was successful
 	if result == nil {
 		// mark as processed
-		if result, err := tx.Exec(statusQuery, "processed", queue, uuid); err != nil {
+		if result, err := tx.Exec(updateStatusQuery, "processed", queue, uuid); err != nil {
 			return id, err
 		} else {
 			if rowCount, err := result.RowsAffected(); err != nil {
@@ -490,7 +456,7 @@ func (s *postgresSource) processNextMessage(
 	var fatalErr *fatalError
 	if errors.As(result, &fatalErr) {
 		// drop the message
-		if result, err := tx.Exec(statusQuery, "dropped", queue, uuid); err != nil {
+		if result, err := tx.Exec(updateStatusQuery, "dropped", queue, uuid); err != nil {
 			return id, err
 		} else {
 			if rowCount, err := result.RowsAffected(); err != nil {
@@ -508,7 +474,7 @@ func (s *postgresSource) processNextMessage(
 	if errors.As(result, &retryErr) {
 		retryAt = retryErr.retryAt
 	}
-	if result, err := tx.Exec(deliverAtQuery, retryAt.UTC(), queue, uuid); err != nil {
+	if result, err := tx.Exec(updateDeliverAtQuery, retryAt.UTC(), queue, uuid); err != nil {
 		return id, err
 	} else {
 		if rowCount, err := result.RowsAffected(); err != nil {

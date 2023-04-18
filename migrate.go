@@ -5,7 +5,6 @@ import (
 	"embed"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/lib/pq"
 )
@@ -40,7 +39,7 @@ func up(db *sql.DB, schema string, idx int, migration string) error {
 	if err != nil {
 		return err
 	}
-	migration = strings.ReplaceAll(migration, ":SCHEMA", schema)
+	migration = withSchema(migration, schema)
 	_, err = tx.Exec(migration)
 	if err != nil {
 		return err

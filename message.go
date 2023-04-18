@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -49,11 +50,22 @@ func (msg *Message) GetPayload(payload any) error {
 	return json.Unmarshal(msg.payload, payload)
 }
 
-var validate *validator.Validate
+var (
+	validate      *validator.Validate
+	validateMutex sync.RWMutex
+)
 
 func getValidator() *validator.Validate {
-	if validate == nil {
+	// check if the instance has to be created
+	var mustInit bool
+	validateMutex.RLock()
+	mustInit = validate == nil
+	validateMutex.RUnlock()
+	// create the instance if required
+	if mustInit {
+		validateMutex.Lock()
 		validate = validator.New()
+		validateMutex.Unlock()
 	}
 	return validate
 }

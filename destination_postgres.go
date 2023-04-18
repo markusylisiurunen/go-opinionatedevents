@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -82,56 +81,6 @@ func (t *postgresRoutingTable) routeToQueues(topic string) []string {
 	return []string{"default"}
 }
 
-// schema configuration for mapping columns to table column names
-// TODO: should be unnecessary once the library handles its own database migrations
-// ---
-
-type postgresSchemaColumn string
-
-const (
-	postgresColumnDeliverAt        postgresSchemaColumn = postgresSchemaColumn("deliver_at")
-	postgresColumnDeliveryAttempts                      = postgresSchemaColumn("delivery_attempts")
-	postgresColumnId                                    = postgresSchemaColumn("id")
-	postgresColumnName                                  = postgresSchemaColumn("name")
-	postgresColumnPayload                               = postgresSchemaColumn("payload")
-	postgresColumnPublishedAt                           = postgresSchemaColumn("published_at")
-	postgresColumnQueue                                 = postgresSchemaColumn("queue")
-	postgresColumnStatus                                = postgresSchemaColumn("status")
-	postgresColumnTopic                                 = postgresSchemaColumn("topic")
-	postgresColumnUuid                                  = postgresSchemaColumn("uuid")
-)
-
-type postgresSchema struct {
-	table   string
-	columns map[postgresSchemaColumn]string
-}
-
-func newPostgresSchema() *postgresSchema {
-	return &postgresSchema{
-		table: "events",
-		columns: map[postgresSchemaColumn]string{
-			postgresColumnDeliverAt:        "deliver_at",
-			postgresColumnDeliveryAttempts: "delivery_attempts",
-			postgresColumnId:               "id",
-			postgresColumnName:             "name",
-			postgresColumnPayload:          "payload",
-			postgresColumnPublishedAt:      "published_at",
-			postgresColumnQueue:            "queue",
-			postgresColumnStatus:           "status",
-			postgresColumnTopic:            "topic",
-			postgresColumnUuid:             "uuid",
-		},
-	}
-}
-
-func (s *postgresSchema) setTable(table string) {
-	s.table = table
-}
-
-func (s *postgresSchema) setColumn(name postgresSchemaColumn, value string) {
-	s.columns[name] = value
-}
-
 // transaction provider which abstracts the underlying database connection away
 // ---
 
@@ -181,19 +130,18 @@ func (p *postgresTransactionProvider) do(ctx context.Context, action func(tx sql
 // ---
 
 type postgresDestination struct {
-	db                sqlDB
-	router            *postgresRoutingTable
-	schemaForColumns  *postgresSchema
-	schemaForPostgres string
-	skipMigrations    bool
-	txprovider        *postgresTransactionProvider
+	db             sqlDB
+	router         *postgresRoutingTable
+	schema         string
+	skipMigrations bool
+	tx             *postgresTransactionProvider
 }
 
 type postgresDestinationOption func(dest *postgresDestination) error
 
 func PostgresDestinationWithSchema(schema string) postgresDestinationOption {
 	return func(d *postgresDestination) error {
-		d.schemaForPostgres = schema
+		d.schema = schema
 		return nil
 	}
 }
@@ -205,37 +153,17 @@ func PostgresDestinationWithTopicToQueues(topic string, queues ...string) postgr
 	}
 }
 
-func PostgresDestinationWithTableName(name string) postgresDestinationOption {
-	return func(d *postgresDestination) error {
-		d.schemaForColumns.setTable(name)
-		return nil
-	}
-}
-
-func PostgresDestinationWithColumnNames(names map[string]string) postgresDestinationOption {
-	return func(d *postgresDestination) error {
-		for name, value := range names {
-			key := postgresSchemaColumn(name)
-			if _, ok := d.schemaForColumns.columns[key]; ok {
-				d.schemaForColumns.setColumn(key, value)
-			}
-		}
-		return nil
-	}
-}
-
 func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*postgresDestination, error) {
 	// init the dependencies
 	_db := &realDB{db: db}
 	txprovider, router := newPostgresTransactionProvider(_db), newPostgresRoutingTable()
 	// init the destination w/ options
 	destination := &postgresDestination{
-		db:                _db,
-		router:            router,
-		schemaForColumns:  newPostgresSchema(),
-		schemaForPostgres: "opinionatedevents",
-		skipMigrations:    false,
-		txprovider:        txprovider,
+		db:             _db,
+		router:         router,
+		schema:         "opinionatedevents",
+		skipMigrations: false,
+		tx:             txprovider,
 	}
 	for _, apply := range options {
 		if err := apply(destination); err != nil {
@@ -244,7 +172,7 @@ func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*
 	}
 	// make sure the migrations are run
 	if !destination.skipMigrations {
-		if err := migrate(db, destination.schemaForPostgres); err != nil {
+		if err := migrate(db, destination.schema); err != nil {
 			return nil, err
 		}
 	}
@@ -253,7 +181,7 @@ func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*
 
 func (d *postgresDestination) setDB(db sqlDB) {
 	d.db = db
-	d.txprovider = newPostgresTransactionProvider(db)
+	d.tx = newPostgresTransactionProvider(db)
 }
 
 func (d *postgresDestination) Deliver(ctx context.Context, msg *Message) error {
@@ -261,7 +189,7 @@ func (d *postgresDestination) Deliver(ctx context.Context, msg *Message) error {
 	if err != nil {
 		return err
 	}
-	return d.txprovider.do(ctx, func(tx sqlTx) error {
+	return d.tx.do(ctx, func(tx sqlTx) error {
 		queues := d.router.routeToQueues(msg.GetTopic())
 		for _, queue := range queues {
 			if err := d.insertMessage(&postgresDestinationInsertMessageArgs{
@@ -291,33 +219,24 @@ type postgresDestinationInsertMessageArgs struct {
 }
 
 func (d *postgresDestination) insertMessage(args *postgresDestinationInsertMessageArgs) error {
-	columns := fmt.Sprintf("(%s, %s, %s, %s, %s, %s, %s, %s)",
-		d.schemaForColumns.columns[postgresColumnStatus],
-		d.schemaForColumns.columns[postgresColumnTopic],
-		d.schemaForColumns.columns[postgresColumnQueue],
-		d.schemaForColumns.columns[postgresColumnPublishedAt],
-		d.schemaForColumns.columns[postgresColumnDeliverAt],
-		d.schemaForColumns.columns[postgresColumnUuid],
-		d.schemaForColumns.columns[postgresColumnName],
-		d.schemaForColumns.columns[postgresColumnPayload],
-	)
-	query := fmt.Sprintf(
+	// define the needed SQL queries
+	insertQuery := withSchema(
 		`
-		INSERT INTO %s.%s %s
+		INSERT INTO :SCHEMA.events (status, topic, queue, published_at, deliver_at, uuid, name, payload)
 		VALUES ('pending', $1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (%s, %s) DO NOTHING
+		ON CONFLICT (queue, uuid) DO NOTHING
 		`,
-		d.schemaForPostgres,
-		d.schemaForColumns.table,
-		columns,
-		d.schemaForColumns.columns[postgresColumnQueue],
-		d.schemaForColumns.columns[postgresColumnUuid],
+		d.schema,
 	)
-	execArgs := []any{args.topic, args.queue, args.publishedAt.UTC(), args.publishedAt.UTC(), args.uuid, args.name, args.payload}
-	_, err := args.tx.Exec(query, execArgs...)
+	// insert the event to the table
+	_, err := args.tx.Exec(insertQuery,
+		args.topic,
+		args.queue,
+		args.publishedAt.UTC(),
+		args.publishedAt.UTC(),
+		args.uuid,
+		args.name,
+		args.payload,
+	)
 	return err
-}
-
-func WithTx(ctx context.Context, tx sqlTx) context.Context {
-	return context.WithValue(ctx, postgresContextKeyForTx, tx)
 }

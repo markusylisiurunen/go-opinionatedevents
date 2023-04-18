@@ -80,52 +80,6 @@ func TestPostgresDestination(t *testing.T) {
 		assert.Equal(t, 1, tx.commitCount)
 		assert.Equal(t, 0, tx.rollbackCount)
 	})
-
-	t.Run("table schema can be overridden", func(t *testing.T) {
-		db := &testDB{}
-		tableName := "thisisthetablename"
-		columnNames := map[string]string{
-			"id":           "thecolumnname_id",
-			"name":         "thecolumnname_name",
-			"payload":      "thecolumnname_payload",
-			"published_at": "thecolumnname_published_at",
-			"queue":        "thecolumnname_queue",
-			"status":       "thecolumnname_status",
-			"topic":        "thecolumnname_topic",
-			"uuid":         "thecolumnname_uuid",
-		}
-		destination, err := NewPostgresDestination(nil,
-			skipMigrations(),
-			PostgresDestinationWithTopicToQueues("customers", "topic.1", "topic.2"),
-			PostgresDestinationWithTableName(tableName),
-			PostgresDestinationWithColumnNames(columnNames),
-		)
-		assert.NoError(t, err)
-		destination.setDB(db)
-		msg, err := NewMessage("customers.created", nil)
-		assert.NoError(t, err)
-		err = destination.Deliver(context.Background(), msg)
-		assert.NoError(t, err)
-		// there should be one transaction from the internal db
-		assert.Equal(t, 1, db.beginCount)
-		assert.Len(t, db.transactions, 1)
-		tx := db.transactions[0]
-		// the message should have been inserted twice (to both target queues)
-		assert.Equal(t, 2, tx.execCount)
-		assert.Equal(t, 1, tx.commitCount)
-		assert.Equal(t, 0, tx.rollbackCount)
-		// the actual query should include the table and column names
-		query := tx.queries[0]
-		assert.Contains(t, query, tableName)
-		for original, columnName := range columnNames {
-			// some of the columns are not supposed to be in the insert query
-			if original == "id" {
-				continue
-			}
-
-			assert.Contains(t, query, columnName)
-		}
-	})
 }
 
 func skipMigrations() postgresDestinationOption {

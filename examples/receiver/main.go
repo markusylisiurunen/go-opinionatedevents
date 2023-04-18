@@ -47,9 +47,8 @@ func main() {
 	}
 	// init the postgres source
 	postgresSource, err := events.NewPostgresSource(db,
-		events.PostgresSourceWithTableName("events"),
 		events.PostgresSourceWithIntervalTrigger(1*time.Second),
-		events.PostgresSourceWithNotifyTrigger(connectionString, "__events"),
+		events.PostgresSourceWithNotifyTrigger(connectionString),
 	)
 	if err != nil {
 		panic(err)

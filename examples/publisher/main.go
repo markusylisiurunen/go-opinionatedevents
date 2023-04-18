@@ -55,7 +55,6 @@ func main() {
 	}
 	// init the postgres destination
 	destination, err := events.NewPostgresDestination(db,
-		events.PostgresDestinationWithTableName("events"),
 		events.PostgresDestinationWithTopicToQueues("customers", "svc_1", "svc_2", "svc_3"),
 	)
 	if err != nil {

@@ -100,56 +100,7 @@ func GetLocalPublisher() *events.Publisher {
 
 ### Postgres
 
-For PostgreSQL, there is a little bit of setup that needs to happen for it to work. You need to
-create a table to your database for the messages.
-
-```sql
-CREATE TABLE events (
-    event_id                SERIAL PRIMARY KEY,
-    event_published_at      TIMESTAMP WITH TIME ZONE NOT NULL,
-    event_deliver_at        TIMESTAMP WITH TIME ZONE NOT NULL,
-    event_delivery_attempts INTEGER NOT NULL DEFAULT 0,
-    event_status            TEXT NOT NULL,
-    event_topic             TEXT NOT NULL,
-    event_queue             TEXT NOT NULL,
-    event_uuid              TEXT NOT NULL,
-    event_name              TEXT NOT NULL,
-    event_payload           JSON NOT NULL,
-
-    UNIQUE (event_queue, event_uuid),
-
-    CHECK (event_status IN ('pending', 'processed', 'dropped'))
-);
-
--- index for making ordered queries for a certain set of queues with a `pending` status
-CREATE INDEX events_status_queue_published_at_idx
-ON events (event_status, event_queue, event_published_at);
-
--- index for making updates to a specific message
-CREATE INDEX events_uuid_queue_idx
-ON events (event_uuid, event_queue);
-
-CREATE FUNCTION notify_of_new_events() RETURNS TRIGGER AS $$
-DECLARE
-    notification JSON;
-BEGIN
-    notification = json_build_object(
-        'topic', NEW .event_topic,
-        'queue', NEW .event_queue,
-        'uuid',  NEW .event_uuid
-    );
-
-    PERFORM pg_notify('__events', notification::TEXT);
-
-    RETURN NULL;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER notify_of_new_events_trigger AFTER INSERT ON events
-FOR EACH ROW EXECUTE PROCEDURE notify_of_new_events();
-```
-
-Once this is done, you can setup the publisher like so.
+For PostgreSQL, you can setup the publisher like so.
 
 ```go
 const (
@@ -167,20 +118,6 @@ func GetPostgresPublisher() *events.Publisher {
     destination, err := events.NewPostgresDestination(db,
         events.PostgresDestinationWithTopicToQueues("test1", "test_queue.1", "test_queue.2"),
         events.PostgresDestinationWithTopicToQueues("test2", "test_queue.1", "test_queue.2"),
-
-        events.PostgresDestinationWithTableName("events"),
-        events.PostgresDestinationWithColumnNames(map[string]string{
-            "id":                "events_id",
-            "published_at":      "events_published_at",
-            "deliver_at":        "events_deliver_at",
-            "delivery_attempts": "events_delivery_attempts",
-            "status":            "events_status",
-            "topic":             "events_topic",
-            "queue":             "events_queue",
-            "uuid":              "events_uuid",
-            "name":              "events_name",
-            "payload":           "events_payload",
-        }),
     )
 
     // initialise the publisher with a sync bridge
