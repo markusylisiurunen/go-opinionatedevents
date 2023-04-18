@@ -115,10 +115,7 @@ func GetPostgresPublisher() *events.Publisher {
     }
 
     // make a new postgres destination
-    destination, err := events.NewPostgresDestination(db,
-        events.PostgresDestinationWithTopicToQueues("test1", "test_queue.1", "test_queue.2"),
-        events.PostgresDestinationWithTopicToQueues("test2", "test_queue.1", "test_queue.2"),
-    )
+    destination, err := events.NewPostgresDestination(db)
 
     // initialise the publisher with a sync bridge
     publisher, err := events.NewPublisher(
