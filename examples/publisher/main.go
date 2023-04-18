@@ -54,9 +54,7 @@ func main() {
 		panic(err)
 	}
 	// init the postgres destination
-	destination, err := events.NewPostgresDestination(db,
-		events.PostgresDestinationWithTopicToQueues("customers", "svc_1", "svc_2", "svc_3"),
-	)
+	destination, err := events.NewPostgresDestination(db)
 	if err != nil {
 		panic(err)
 	}

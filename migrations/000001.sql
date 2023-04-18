@@ -15,6 +15,16 @@ create table :SCHEMA.events (
   constraint events_status_check check (status in ('pending', 'processed', 'dropped'))
 );
 
+create table :SCHEMA.routing (
+  id bigserial primary key,
+  created_at timestamptz not null default now(),
+  last_declared_at timestamptz not null default now(),
+  topic text not null,
+  queue text not null,
+
+  unique (topic, queue)
+);
+
 -- an index for making ordered queries for a certain set of queues with a `pending` status
 create index events_status_queue_published_at_idx
 on :SCHEMA.events (status, queue, published_at);

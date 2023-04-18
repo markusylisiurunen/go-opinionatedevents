@@ -46,22 +46,35 @@ func main() {
 		panic(err)
 	}
 	// init the postgres source
-	postgresSource, err := events.NewPostgresSource(db,
+	source, err := events.NewPostgresSource(db,
 		events.PostgresSourceWithIntervalTrigger(1*time.Second),
 		events.PostgresSourceWithNotifyTrigger(connectionString),
 	)
 	if err != nil {
 		panic(err)
 	}
+	// declare the topic -> queue -mappings for the service
+	if err := source.QueueDeclare(&events.PostgresSourceQueueDeclareParams{
+		Topic: "customers",
+		Queue: "receiver.default",
+	}); err != nil {
+		panic(err)
+	}
+	if err := source.QueueDeclare(&events.PostgresSourceQueueDeclareParams{
+		Topic: "customers",
+		Queue: "receiver.unused",
+	}); err != nil {
+		panic(err)
+	}
 	// init the receiver
 	receiver, err := events.NewReceiver(
-		events.ReceiverWithSource(postgresSource),
+		events.ReceiverWithSource(source),
 	)
 	if err != nil {
 		panic(err)
 	}
 	// attach the handlers
-	for _, queue := range []string{"svc_1", "svc_2"} { // `svc_3` will be skipped
+	for _, queue := range []string{"receiver.default"} { // `receiver.unused` will be skipped
 		receiver.On(queue, "customers.created", events.WithLimit(3)(
 			// from the 2nd attempt: 30s, 94s, 566s, 1800s, 1800s...
 			events.WithBackoff(events.ExponentialBackoff(30, 10, 2, 30*time.Minute))(

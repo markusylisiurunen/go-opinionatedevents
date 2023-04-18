@@ -15,6 +15,7 @@ func TestPostgresDestination(t *testing.T) {
 		destination, err := NewPostgresDestination(nil, skipMigrations())
 		assert.NoError(t, err)
 		destination.setDB(db)
+		destination.setRouting(newTestRouting([]string{"default"}))
 		for i := 0; i < 3; i += 1 {
 			msg, err := NewMessage("customers.created", nil)
 			assert.NoError(t, err)
@@ -36,6 +37,7 @@ func TestPostgresDestination(t *testing.T) {
 		destination, err := NewPostgresDestination(nil, skipMigrations())
 		assert.NoError(t, err)
 		destination.setDB(db)
+		destination.setRouting(newTestRouting([]string{"default"}))
 		newDB := &testDB{}
 		tx, err := newDB.Begin()
 		assert.NoError(t, err)
@@ -55,6 +57,7 @@ func TestPostgresDestination(t *testing.T) {
 		assert.Len(t, newDB.transactions, 1)
 		// make sure that the destination did not commit the transaction
 		assert.Equal(t, 3, newDB.transactions[0].execCount)
+		assert.Equal(t, 0, newDB.transactions[0].queryCount)
 		assert.Equal(t, 0, newDB.transactions[0].commitCount)
 		assert.Equal(t, 0, newDB.transactions[0].rollbackCount)
 	})
@@ -63,10 +66,10 @@ func TestPostgresDestination(t *testing.T) {
 		db := &testDB{}
 		destination, err := NewPostgresDestination(nil,
 			skipMigrations(),
-			PostgresDestinationWithTopicToQueues("customers", "topic.1", "topic.2"),
 		)
 		assert.NoError(t, err)
 		destination.setDB(db)
+		destination.setRouting(newTestRouting([]string{"topic.1", "topic.2"}))
 		msg, err := NewMessage("customers.created", nil)
 		assert.NoError(t, err)
 		err = destination.Deliver(context.Background(), msg)
@@ -77,6 +80,7 @@ func TestPostgresDestination(t *testing.T) {
 		tx := db.transactions[0]
 		// the message should have been inserted twice (to both target queues)
 		assert.Equal(t, 2, tx.execCount)
+		assert.Equal(t, 0, tx.queryCount)
 		assert.Equal(t, 1, tx.commitCount)
 		assert.Equal(t, 0, tx.rollbackCount)
 	})
@@ -93,6 +97,7 @@ type testTx struct {
 	queries []string
 
 	execCount     int
+	queryCount    int
 	commitCount   int
 	rollbackCount int
 }
@@ -100,6 +105,12 @@ type testTx struct {
 func (ttx *testTx) Exec(query string, args ...any) (sql.Result, error) {
 	ttx.queries = append(ttx.queries, query)
 	ttx.execCount += 1
+	return nil, nil
+}
+
+func (ttx *testTx) Query(query string, args ...any) (*sql.Rows, error) {
+	ttx.queries = append(ttx.queries, query)
+	ttx.queryCount += 1
 	return nil, nil
 }
 
@@ -130,4 +141,16 @@ func (tdb *testDB) Begin() (sqlTx, error) {
 	tdb.transactions = append(tdb.transactions, tx)
 	tdb.beginCount += 1
 	return tx, nil
+}
+
+type testRouting struct {
+	_queues []string
+}
+
+func newTestRouting(queues []string) *testRouting {
+	return &testRouting{_queues: queues}
+}
+
+func (tr *testRouting) queues(tx sqlTx, topic string) ([]string, error) {
+	return tr._queues, nil
 }

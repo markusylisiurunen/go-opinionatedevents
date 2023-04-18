@@ -236,6 +236,30 @@ func NewPostgresSource(db *sql.DB, options ...postgresSourceOption) (*postgresSo
 	return source, nil
 }
 
+type PostgresSourceQueueDeclareParams struct {
+	Topic string
+	Queue string
+}
+
+func (s *postgresSource) QueueDeclare(params *PostgresSourceQueueDeclareParams) error {
+	upsertSubscriptionQuery := withSchema(
+		`
+		INSERT INTO :SCHEMA.routing (topic, queue)
+		VALUES ($1, $2)
+		ON CONFLICT (topic, queue) DO UPDATE SET
+			last_declared_at = now()
+		`,
+		s.schema,
+	)
+	if _, err := s.db.Exec(upsertSubscriptionQuery,
+		params.Topic,
+		params.Queue,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *postgresSource) Start(ctx context.Context, receiver *Receiver) error {
 	if s.receiver != nil {
 		return fmt.Errorf("cannot start a source more than once")

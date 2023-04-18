@@ -20,6 +20,7 @@ const (
 
 type sqlTx interface {
 	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
 	Commit() error
 	Rollback() error
 }
@@ -34,6 +35,10 @@ type realTX struct {
 
 func (rtx *realTX) Exec(query string, args ...any) (sql.Result, error) {
 	return rtx.tx.Exec(query, args...)
+}
+
+func (rtx *realTX) Query(query string, args ...any) (*sql.Rows, error) {
+	return rtx.tx.Query(query, args...)
 }
 
 func (rtx *realTX) Commit() error {
@@ -53,32 +58,40 @@ func (rdb *realDB) Begin() (sqlTx, error) {
 	return &realTX{tx: tx}, err
 }
 
-// routing table to configure the topic -> {queue_1, queue_2, ...} mappings
+// routing provider
 // ---
 
-type postgresRoutingTable struct {
-	topicToQueues map[string][]string
+type postgresRoutingProvider interface {
+	queues(tx sqlTx, topic string) ([]string, error)
 }
 
-func newPostgresRoutingTable() *postgresRoutingTable {
-	return &postgresRoutingTable{
-		topicToQueues: map[string][]string{},
-	}
+type persistedPostgresRoutingProvider struct {
+	schema string
 }
 
-func (t *postgresRoutingTable) appendQueuesForTopic(topic string, queues ...string) {
-	if _, ok := t.topicToQueues[topic]; ok {
-		t.topicToQueues[topic] = append(t.topicToQueues[topic], queues...)
-	} else {
-		t.topicToQueues[topic] = queues
-	}
+func newPersistedPostgresRoutingProvider(schema string) *persistedPostgresRoutingProvider {
+	return &persistedPostgresRoutingProvider{schema: schema}
 }
 
-func (t *postgresRoutingTable) routeToQueues(topic string) []string {
-	if queues, ok := t.topicToQueues[topic]; ok {
-		return queues
+func (p *persistedPostgresRoutingProvider) queues(tx sqlTx, topic string) ([]string, error) {
+	listSubscribedQueuesQuery := withSchema(
+		`SELECT queue FROM :SCHEMA.routing WHERE topic = $1`,
+		p.schema,
+	)
+	rows, err := tx.Query(listSubscribedQueuesQuery, topic)
+	if err != nil {
+		return nil, err
 	}
-	return []string{"default"}
+	defer rows.Close()
+	queues := []string{}
+	for rows.Next() {
+		var queue string
+		if err := rows.Scan(&queue); err != nil {
+			return nil, err
+		}
+		queues = append(queues, queue)
+	}
+	return queues, nil
 }
 
 // transaction provider which abstracts the underlying database connection away
@@ -131,7 +144,7 @@ func (p *postgresTransactionProvider) do(ctx context.Context, action func(tx sql
 
 type postgresDestination struct {
 	db             sqlDB
-	router         *postgresRoutingTable
+	routing        postgresRoutingProvider
 	schema         string
 	skipMigrations bool
 	tx             *postgresTransactionProvider
@@ -146,24 +159,17 @@ func PostgresDestinationWithSchema(schema string) postgresDestinationOption {
 	}
 }
 
-func PostgresDestinationWithTopicToQueues(topic string, queues ...string) postgresDestinationOption {
-	return func(d *postgresDestination) error {
-		d.router.appendQueuesForTopic(topic, queues...)
-		return nil
-	}
-}
-
 func NewPostgresDestination(db *sql.DB, options ...postgresDestinationOption) (*postgresDestination, error) {
 	// init the dependencies
 	_db := &realDB{db: db}
-	txprovider, router := newPostgresTransactionProvider(_db), newPostgresRoutingTable()
 	// init the destination w/ options
+	defaultSchema := "opinionatedevents"
 	destination := &postgresDestination{
 		db:             _db,
-		router:         router,
-		schema:         "opinionatedevents",
+		routing:        newPersistedPostgresRoutingProvider(defaultSchema),
+		schema:         defaultSchema,
 		skipMigrations: false,
-		tx:             txprovider,
+		tx:             newPostgresTransactionProvider(_db),
 	}
 	for _, apply := range options {
 		if err := apply(destination); err != nil {
@@ -184,13 +190,20 @@ func (d *postgresDestination) setDB(db sqlDB) {
 	d.tx = newPostgresTransactionProvider(db)
 }
 
+func (d *postgresDestination) setRouting(routing postgresRoutingProvider) {
+	d.routing = routing
+}
+
 func (d *postgresDestination) Deliver(ctx context.Context, msg *Message) error {
 	payload, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
 	return d.tx.do(ctx, func(tx sqlTx) error {
-		queues := d.router.routeToQueues(msg.GetTopic())
+		queues, err := d.routing.queues(tx, msg.GetTopic())
+		if err != nil {
+			return err
+		}
 		for _, queue := range queues {
 			if err := d.insertMessage(&postgresDestinationInsertMessageArgs{
 				name:        msg.GetName(),
