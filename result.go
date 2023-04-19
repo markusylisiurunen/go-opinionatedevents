@@ -35,7 +35,7 @@ func Fatal(err error) error {
 	return &fatalError{err}
 }
 
-func isFatal(err error) bool {
+func IsFatal(err error) bool {
 	var fatalErr *fatalError
 	return errors.As(err, &fatalErr)
 }
