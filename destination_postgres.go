@@ -154,6 +154,7 @@ type postgresDestinationOption func(dest *postgresDestination) error
 
 func PostgresDestinationWithSchema(schema string) postgresDestinationOption {
 	return func(d *postgresDestination) error {
+		d.routing = newPersistedPostgresRoutingProvider(schema)
 		d.schema = schema
 		return nil
 	}
