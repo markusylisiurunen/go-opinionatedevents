@@ -3,7 +3,7 @@ module github.com/markusylisiurunen/go-opinionatedevents
 go 1.20
 
 require (
-	github.com/go-playground/validator/v10 v10.12.0
+	github.com/go-playground/validator/v10 v10.13.0
 	github.com/google/uuid v1.3.0
 	github.com/lib/pq v1.10.8
 	github.com/stretchr/testify v1.8.2
