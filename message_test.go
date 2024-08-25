@@ -32,6 +32,20 @@ func TestMessageSerialization(t *testing.T) {
 		assert.Equal(t, "42", payload.Value)
 	})
 
+	t.Run("unmarshals correctly when no deliver at present", func(t *testing.T) {
+		// unmarsal a message without deliver at
+		serialized := `{"name":"test","meta":{"uuid":"12345","published_at":"2021-10-10T12:32:00Z"},"payload":""}`
+		unserialized := &Message{}
+		err := json.Unmarshal([]byte(serialized), unserialized)
+		assert.NoError(t, err)
+		// assert other than deliver at
+		assert.Equal(t, "test", unserialized.name)
+		assert.Equal(t, "12345", unserialized.uuid)
+		assert.Equal(t, "2021-10-10T12:32:00Z", unserialized.publishedAt.UTC().Format(time.RFC3339))
+		// assert that deliver at is equal to published at
+		assert.Equal(t, unserialized.publishedAt.Unix(), unserialized.deliverAt.Unix())
+	})
+
 	t.Run("does not accept invalid JSON", func(t *testing.T) {
 		messages := []struct {
 			value string

@@ -210,6 +210,7 @@ func (d *postgresDestination) Deliver(ctx context.Context, msg *Message) error {
 				name:        msg.GetName(),
 				payload:     payload,
 				publishedAt: msg.GetPublishedAt(),
+				deliverAt:   msg.GetDeliverAt(),
 				queue:       queue,
 				topic:       msg.GetTopic(),
 				tx:          tx,
@@ -226,6 +227,7 @@ type postgresDestinationInsertMessageArgs struct {
 	name        string
 	payload     []byte
 	publishedAt time.Time
+	deliverAt   time.Time
 	queue       string
 	topic       string
 	tx          sqlTx
@@ -247,7 +249,7 @@ func (d *postgresDestination) insertMessage(args *postgresDestinationInsertMessa
 		args.topic,
 		args.queue,
 		args.publishedAt.UTC(),
-		args.publishedAt.UTC(),
+		args.deliverAt.UTC(),
 		args.uuid,
 		args.name,
 		args.payload,

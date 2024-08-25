@@ -80,6 +80,9 @@ func (p *Publisher) Publish(ctx context.Context, msg *Message) error {
 	if msg.publishedAt.IsZero() {
 		msg.publishedAt = time.Now()
 	}
+	if msg.deliverAt.IsZero() {
+		msg.deliverAt = msg.publishedAt
+	}
 	p.inFlightWaitingGroup.Add(1)
 	envelope := p.bridge.take(ctx, msg)
 	// FIXME: this entire `isClosed` is fucked up, eg. there is no way to extract the actual error...
