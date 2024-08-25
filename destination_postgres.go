@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -198,6 +200,7 @@ func (d *postgresDestination) setRouting(routing postgresRoutingProvider) {
 func (d *postgresDestination) Deliver(ctx context.Context, batch []*Message) error {
 	// FIXME: should insert a batch of messages in a single INSERT statement
 	return d.tx.do(ctx, func(tx sqlTx) error {
+		toBeInserted := []*postgresDestinationInsertMessage{}
 		for _, msg := range batch {
 			payload, err := json.Marshal(msg)
 			if err != nil {
@@ -208,54 +211,69 @@ func (d *postgresDestination) Deliver(ctx context.Context, batch []*Message) err
 				return err
 			}
 			for _, queue := range queues {
-				if err := d.insertMessage(&postgresDestinationInsertMessageArgs{
+				toBeInserted = append(toBeInserted, &postgresDestinationInsertMessage{
 					name:        msg.GetName(),
 					payload:     payload,
 					publishedAt: msg.GetPublishedAt(),
 					deliverAt:   msg.GetDeliverAt(),
 					queue:       queue,
 					topic:       msg.GetTopic(),
-					tx:          tx,
 					uuid:        msg.GetUUID(),
-				}); err != nil {
-					return err
-				}
+				})
+
 			}
 		}
-		return nil
+		return d.insertMessages(tx, toBeInserted...)
 	})
 }
 
-type postgresDestinationInsertMessageArgs struct {
+type postgresDestinationInsertMessage struct {
+	deliverAt   time.Time
 	name        string
 	payload     []byte
 	publishedAt time.Time
-	deliverAt   time.Time
 	queue       string
 	topic       string
-	tx          sqlTx
 	uuid        string
 }
 
-func (d *postgresDestination) insertMessage(args *postgresDestinationInsertMessageArgs) error {
-	// define the needed SQL queries
-	insertQuery := withSchema(
-		`
+func (d *postgresDestination) insertMessages(tx sqlTx, messages ...*postgresDestinationInsertMessage) error {
+	for _, batch := range groupIntoBatches(messages, 128) {
+		var paramIdx int = 0
+		params := []any{}
+		asParam := func(v any) string {
+			params = append(params, v)
+			paramIdx++
+			return fmt.Sprintf("$%d", paramIdx)
+		}
+		var values = []string{}
+		for _, i := range batch {
+			values = append(values,
+				fmt.Sprintf("('pending', %s, %s, %s, %s, %s, %s, %s)",
+					asParam(i.topic),
+					asParam(i.queue),
+					asParam(i.publishedAt.UTC()),
+					asParam(i.deliverAt.UTC()),
+					asParam(i.uuid),
+					asParam(i.name),
+					asParam(i.payload),
+				),
+			)
+		}
+		// define the needed SQL queries
+		var insertQueryTemplate = `
 		INSERT INTO :SCHEMA.events (status, topic, queue, published_at, deliver_at, uuid, name, payload)
-		VALUES ('pending', $1, $2, $3, $4, $5, $6, $7)
+		VALUES %s
 		ON CONFLICT (queue, uuid) DO NOTHING
-		`,
-		d.schema,
-	)
-	// insert the event to the table
-	_, err := args.tx.Exec(insertQuery,
-		args.topic,
-		args.queue,
-		args.publishedAt.UTC(),
-		args.deliverAt.UTC(),
-		args.uuid,
-		args.name,
-		args.payload,
-	)
-	return err
+		`
+		insertQuery := withSchema(
+			fmt.Sprintf(insertQueryTemplate, strings.Join(values, ", ")),
+			d.schema,
+		)
+		// insert the event to the table
+		if _, err := tx.Exec(insertQuery, params...); err != nil {
+			return err
+		}
+	}
+	return nil
 }

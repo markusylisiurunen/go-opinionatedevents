@@ -78,8 +78,8 @@ func TestPostgresDestination(t *testing.T) {
 		assert.Equal(t, 1, db.beginCount)
 		assert.Len(t, db.transactions, 1)
 		tx := db.transactions[0]
-		// the message should have been inserted twice (to both target queues)
-		assert.Equal(t, 2, tx.execCount)
+		// the messages should have been inserted in a single exec call
+		assert.Equal(t, 1, tx.execCount)
 		assert.Equal(t, 0, tx.queryCount)
 		assert.Equal(t, 1, tx.commitCount)
 		assert.Equal(t, 0, tx.rollbackCount)
