@@ -18,15 +18,15 @@ func TestSyncBridge(t *testing.T) {
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
 		// pass it through the sync bridge
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.Error(t, waitForSuccessEnvelope(envelope))
 		// try again with a handler defined
-		destination.pushHandler(func(_ context.Context, _ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ []*Message) error {
 			return nil
 		})
 		msg, err = NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope = bridge.take(ctx, msg)
+		envelope = bridge.take(ctx, []*Message{msg})
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
 	})
 
@@ -40,14 +40,14 @@ func TestSyncBridge(t *testing.T) {
 		handled := 0
 		for i := 0; i < countToHandle; i++ {
 			// push the handler
-			destination.pushHandler(func(_ context.Context, _ *Message) error {
+			destination.pushHandler(func(_ context.Context, _ []*Message) error {
 				handled += 1
 				return nil
 			})
 			// deliver the next message
 			msg, err := NewMessage("test.test", nil)
 			assert.NoError(t, err)
-			envelope := bridge.take(ctx, msg)
+			envelope := bridge.take(ctx, []*Message{msg})
 			assert.NoError(t, waitForSuccessEnvelope(envelope))
 			// check that it was handled
 			expected := i + 1
@@ -66,7 +66,7 @@ func TestSyncBridge(t *testing.T) {
 		bridge := newSyncBridge(destination)
 		// push the slow handler
 		waitFor := 250
-		destination.pushHandler(func(_ context.Context, _ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ []*Message) error {
 			time.Sleep(time.Duration(waitFor) * time.Millisecond)
 			return nil
 		})
@@ -74,7 +74,7 @@ func TestSyncBridge(t *testing.T) {
 		startAt := time.Now()
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
 		overAt := time.Now()
 		if overAt.Sub(startAt).Milliseconds() < int64(waitFor) {
@@ -87,13 +87,13 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 		// push the failing handler
-		destination.pushHandler(func(_ context.Context, _ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ []*Message) error {
 			return errors.New("failed")
 		})
 		// deliver the message
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.Error(t, waitForSuccessEnvelope(envelope))
 	})
 
@@ -102,13 +102,13 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 		// push the handler
-		destination.pushHandler(func(_ context.Context, _ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ []*Message) error {
 			return nil
 		})
 		// deliver the message
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		var success bool
 		select {
 		case <-envelope.onSuccess():
@@ -124,13 +124,13 @@ func TestSyncBridge(t *testing.T) {
 		destination := newTestDestination()
 		bridge := newSyncBridge(destination)
 		// push the failing handler
-		destination.pushHandler(func(_ context.Context, _ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ []*Message) error {
 			return errors.New("failed to deliver")
 		})
 		// deliver the message
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		var success bool
 		select {
 		case <-envelope.onSuccess():

@@ -19,8 +19,8 @@ func newDeliveryEvent(name string) *deliveryEvent {
 }
 
 type envelope struct {
-	ctx context.Context
-	msg *Message
+	ctx   context.Context
+	batch []*Message
 
 	events chan *deliveryEvent
 
@@ -139,10 +139,10 @@ func (e *envelope) addProxy(proxy chan *deliveryEvent) {
 	})
 }
 
-func newEnvelope(ctx context.Context, msg *Message) *envelope {
+func newEnvelope(ctx context.Context, batch []*Message) *envelope {
 	env := &envelope{
-		ctx: ctx,
-		msg: msg,
+		ctx:   ctx,
+		batch: batch,
 
 		events:  make(chan *deliveryEvent),
 		proxies: []chan *deliveryEvent{},

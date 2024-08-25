@@ -10,11 +10,11 @@ func newSyncBridge(destinations ...Destination) *syncBridge {
 	return &syncBridge{destinations: destinations}
 }
 
-func (b *syncBridge) take(ctx context.Context, msg *Message) *envelope {
-	env := newEnvelope(ctx, msg)
+func (b *syncBridge) take(ctx context.Context, batch []*Message) *envelope {
+	env := newEnvelope(ctx, batch)
 	var possibleErr error = nil
 	for _, d := range b.destinations {
-		if err := d.Deliver(ctx, msg); err != nil {
+		if err := d.Deliver(ctx, batch); err != nil {
 			possibleErr = err
 		}
 	}

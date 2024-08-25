@@ -28,8 +28,8 @@ func (d *httpDestination) setClient(client httpClient) {
 	d.client = client
 }
 
-func (d *httpDestination) Deliver(_ context.Context, msg *Message) error {
-	payload, err := json.Marshal(msg)
+func (d *httpDestination) Deliver(_ context.Context, batch []*Message) error {
+	payload, err := json.Marshal(batch)
 	if err != nil {
 		return err
 	}

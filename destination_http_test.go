@@ -21,7 +21,7 @@ func TestHTTPDestination(t *testing.T) {
 		destination.setClient(client)
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		err = destination.Deliver(ctx, msg)
+		err = destination.Deliver(ctx, []*Message{msg})
 		assert.Error(t, err)
 	})
 
@@ -41,7 +41,7 @@ func TestHTTPDestination(t *testing.T) {
 		// publish the message
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		err = destination.Deliver(ctx, msg)
+		err = destination.Deliver(ctx, []*Message{msg})
 		assert.NoError(t, err)
 		assert.Equal(t, 1, i)
 	})
@@ -62,7 +62,7 @@ func TestHTTPDestination(t *testing.T) {
 		// publish the message
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		err = destination.Deliver(ctx, msg)
+		err = destination.Deliver(ctx, []*Message{msg})
 		assert.Error(t, err)
 		assert.Equal(t, 1, i)
 	})
@@ -87,31 +87,34 @@ func TestHTTPDestination(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			var payload map[string]interface{}
+			var payload []map[string]interface{}
 			if err := json.Unmarshal(body, &payload); err != nil {
 				return nil, err
 			}
-			meta, ok := payload["meta"].(map[string]interface{})
-			assert.True(t, ok)
-			// assert the data types
-			assert.IsType(t, "", payload["name"])
-			assert.IsType(t, "", payload["payload"])
-			assert.IsType(t, "", meta["published_at"])
-			// assert some fields
-			assert.Equal(t, "test.test", payload["name"])
-			assert.Equal(t, msg.GetPublishedAt().UTC().Format(time.RFC3339Nano), meta["published_at"])
-			// parse the message payload
-			payloadAsJson, err := base64.StdEncoding.DecodeString(payload["payload"].(string))
-			assert.NoError(t, err)
-			var data map[string]interface{}
-			assert.NoError(t, json.Unmarshal(payloadAsJson, &data))
-			assert.Equal(t, "world", data["hello"])
-			assert.Equal(t, true, data["ok"])
-			assert.Equal(t, 4.0, data["age"])
+			assert.Len(t, payload, 1)
+			for _, i := range payload {
+				meta, ok := i["meta"].(map[string]interface{})
+				assert.True(t, ok)
+				// assert the data types
+				assert.IsType(t, "", i["name"])
+				assert.IsType(t, "", i["payload"])
+				assert.IsType(t, "", meta["published_at"])
+				// assert some fields
+				assert.Equal(t, "test.test", i["name"])
+				assert.Equal(t, msg.GetPublishedAt().UTC().Format(time.RFC3339Nano), meta["published_at"])
+				// parse the message payload
+				payloadAsJson, err := base64.StdEncoding.DecodeString(i["payload"].(string))
+				assert.NoError(t, err)
+				var data map[string]interface{}
+				assert.NoError(t, json.Unmarshal(payloadAsJson, &data))
+				assert.Equal(t, "world", data["hello"])
+				assert.Equal(t, true, data["ok"])
+				assert.Equal(t, 4.0, data["age"])
+			}
 			return &http.Response{StatusCode: 200}, nil
 		})
 		// publish the message
-		deliveryErr := destination.Deliver(ctx, msg)
+		deliveryErr := destination.Deliver(ctx, []*Message{msg})
 		assert.NoError(t, deliveryErr)
 	})
 }

@@ -17,14 +17,14 @@ func TestAsyncBridge(t *testing.T) {
 		bridge := newAsyncBridge(3, 0, destination)
 		// push the handler
 		attempts := 0
-		destination.pushHandler(func(_ context.Context, _ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ []*Message) error {
 			attempts += 1
 			return nil
 		})
 		// deliver the message & assert
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
 		assert.Equal(t, 1, attempts)
 	})
@@ -37,7 +37,7 @@ func TestAsyncBridge(t *testing.T) {
 		attempts := 0
 		for i := 0; i < 2; i++ {
 			isFirstHandler := i == 0
-			destination.pushHandler(func(_ context.Context, _ *Message) error {
+			destination.pushHandler(func(_ context.Context, _ []*Message) error {
 				attempts += 1
 				if isFirstHandler {
 					return fmt.Errorf("failed to deliver")
@@ -49,7 +49,7 @@ func TestAsyncBridge(t *testing.T) {
 		// deliver the message & assert
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
 		assert.Equal(t, 2, attempts)
 	})
@@ -65,7 +65,7 @@ func TestAsyncBridge(t *testing.T) {
 			attemptIndex := i
 			shouldFail := i == 0
 			for u := 0; u < bridge.deliveryConfig.maxAttempts; u += 1 {
-				d.pushHandler(func(_ context.Context, _ *Message) error {
+				d.pushHandler(func(_ context.Context, _ []*Message) error {
 					attempts[attemptIndex] = attempts[attemptIndex] + 1
 					if shouldFail {
 						return fmt.Errorf("failed to deliver")
@@ -78,7 +78,7 @@ func TestAsyncBridge(t *testing.T) {
 		// deliver the message & assert
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.Error(t, waitForSuccessEnvelope(envelope))
 		// the first one will fail (attempts should be 3)
 		assert.Equal(t, 3, attempts[0])
@@ -93,7 +93,7 @@ func TestAsyncBridge(t *testing.T) {
 		// push the handlers
 		attempts := 0
 		for i := 0; i < bridge.deliveryConfig.maxAttempts+1; i++ {
-			destination.pushHandler(func(_ context.Context, _ *Message) error {
+			destination.pushHandler(func(_ context.Context, _ []*Message) error {
 				attempts += 1
 				return fmt.Errorf("delivery failed")
 			})
@@ -101,7 +101,7 @@ func TestAsyncBridge(t *testing.T) {
 		// deliver the message & assert
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.Error(t, waitForSuccessEnvelope(envelope))
 		assert.Equal(t, bridge.deliveryConfig.maxAttempts, attempts)
 		assert.Len(t, destination.handlers, 1) // there should be one handler left
@@ -113,7 +113,7 @@ func TestAsyncBridge(t *testing.T) {
 		bridge := newAsyncBridge(3, 0, destination)
 		// push the handler
 		waitFor := 100
-		destination.pushHandler(func(_ context.Context, _ *Message) error {
+		destination.pushHandler(func(_ context.Context, _ []*Message) error {
 			time.Sleep(time.Duration(waitFor) * time.Millisecond)
 			return nil
 		})
@@ -121,7 +121,7 @@ func TestAsyncBridge(t *testing.T) {
 		start := time.Now()
 		msg, err := NewMessage("test.test", nil)
 		assert.NoError(t, err)
-		envelope := bridge.take(ctx, msg)
+		envelope := bridge.take(ctx, []*Message{msg})
 		assert.NoError(t, waitForSuccessEnvelope(envelope))
 		duration := time.Since(start).Milliseconds()
 		assert.GreaterOrEqual(t, duration, int64(waitFor))

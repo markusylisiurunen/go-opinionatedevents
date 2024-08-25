@@ -19,7 +19,7 @@ func TestPostgresDestination(t *testing.T) {
 		for i := 0; i < 3; i += 1 {
 			msg, err := NewMessage("customers.created", nil)
 			assert.NoError(t, err)
-			err = destination.Deliver(context.Background(), msg)
+			err = destination.Deliver(context.Background(), []*Message{msg})
 			assert.NoError(t, err)
 		}
 		// each message should have been sent in its own transaction
@@ -46,7 +46,7 @@ func TestPostgresDestination(t *testing.T) {
 		for i := 0; i < 3; i += 1 {
 			msg, err := NewMessage("customers.created", nil)
 			assert.NoError(t, err)
-			err = destination.Deliver(ctx, msg)
+			err = destination.Deliver(ctx, []*Message{msg})
 			assert.NoError(t, err)
 		}
 		// the internal db should not have been used...
@@ -72,7 +72,7 @@ func TestPostgresDestination(t *testing.T) {
 		destination.setRouting(newTestRouting([]string{"topic.1", "topic.2"}))
 		msg, err := NewMessage("customers.created", nil)
 		assert.NoError(t, err)
-		err = destination.Deliver(context.Background(), msg)
+		err = destination.Deliver(context.Background(), []*Message{msg})
 		assert.NoError(t, err)
 		// there should be one transaction from the internal db
 		assert.Equal(t, 1, db.beginCount)

@@ -10,7 +10,7 @@ import (
 )
 
 type onDeliveryFailureHandler struct {
-	handler func(msg *Message)
+	handler func(batch []*Message)
 }
 
 type Publisher struct {
@@ -62,10 +62,10 @@ func NewPublisher(opts ...publisherOption) (*Publisher, error) {
 	return publisher, nil
 }
 
-func (p *Publisher) OnDeliveryFailure(handler func(msg *Message)) func() {
-	p.onDeliveryFailureHandlers = append(p.onDeliveryFailureHandlers, &onDeliveryFailureHandler{
-		handler: handler,
-	})
+func (p *Publisher) OnDeliveryFailure(handler func(batch []*Message)) func() {
+	p.onDeliveryFailureHandlers = append(p.onDeliveryFailureHandlers,
+		&onDeliveryFailureHandler{handler: handler},
+	)
 	return func() {
 		for i := 0; i < len(p.onDeliveryFailureHandlers); i += 1 {
 			if reflect.ValueOf(p.onDeliveryFailureHandlers[i].handler).Pointer() == reflect.ValueOf(handler).Pointer() {
@@ -76,24 +76,35 @@ func (p *Publisher) OnDeliveryFailure(handler func(msg *Message)) func() {
 	}
 }
 
-func (p *Publisher) Publish(ctx context.Context, msg *Message) error {
-	if msg.publishedAt.IsZero() {
-		msg.publishedAt = time.Now()
-	}
-	if msg.deliverAt.IsZero() {
-		msg.deliverAt = msg.publishedAt
+func (p *Publisher) PublishOne(ctx context.Context, msg *Message) error {
+	batch := []*Message{msg}
+	return p.publish(ctx, batch)
+}
+
+func (p *Publisher) PublishMany(ctx context.Context, batch []*Message) error {
+	return p.publish(ctx, batch)
+}
+
+func (p *Publisher) publish(ctx context.Context, batch []*Message) error {
+	for _, msg := range batch {
+		if msg.publishedAt.IsZero() {
+			msg.publishedAt = time.Now()
+		}
+		if msg.deliverAt.IsZero() {
+			msg.deliverAt = msg.publishedAt
+		}
 	}
 	p.inFlightWaitingGroup.Add(1)
-	envelope := p.bridge.take(ctx, msg)
+	envelope := p.bridge.take(ctx, batch)
 	// FIXME: this entire `isClosed` is fucked up, eg. there is no way to extract the actual error...
 	if envelope.isClosed() {
 		// the envelope was closed synchronously -> handle result synchronously
 		p.inFlightWaitingGroup.Done()
 		if envelope.isClosedWith(deliveryEventFailureName) {
 			for _, handleFailure := range p.onDeliveryFailureHandlers {
-				handleFailure.handler(msg)
+				handleFailure.handler(batch)
 			}
-			return fmt.Errorf("error publishing a message: %#v", msg)
+			return fmt.Errorf("error publishing a batch of messages: %#v", batch)
 		}
 		return nil
 	}
@@ -105,7 +116,7 @@ func (p *Publisher) Publish(ctx context.Context, msg *Message) error {
 		case <-envelope.onFailure():
 			p.inFlightWaitingGroup.Done()
 			for _, handleFailure := range p.onDeliveryFailureHandlers {
-				handleFailure.handler(msg)
+				handleFailure.handler(batch)
 			}
 		}
 	}()

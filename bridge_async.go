@@ -25,8 +25,8 @@ func newAsyncBridge(maxDeliveryAttempts int, waitBetweenAttempts int, destinatio
 	}
 }
 
-func (b *asyncBridge) take(ctx context.Context, msg *Message) *envelope {
-	env := newEnvelope(ctx, msg)
+func (b *asyncBridge) take(ctx context.Context, batch []*Message) *envelope {
+	env := newEnvelope(ctx, batch)
 	go b.deliver(env)
 	return env
 }
@@ -40,7 +40,7 @@ func (b *asyncBridge) deliver(envelope *envelope) {
 		// try delivering the message to all (pending) destinations
 		deliveredTo := []int{}
 		for i, destination := range destinations {
-			if err := destination.Deliver(envelope.ctx, envelope.msg); err == nil {
+			if err := destination.Deliver(envelope.ctx, envelope.batch); err == nil {
 				deliveredTo = append(deliveredTo, i)
 			}
 		}

@@ -195,28 +195,31 @@ func (d *postgresDestination) setRouting(routing postgresRoutingProvider) {
 	d.routing = routing
 }
 
-func (d *postgresDestination) Deliver(ctx context.Context, msg *Message) error {
-	payload, err := json.Marshal(msg)
-	if err != nil {
-		return err
-	}
+func (d *postgresDestination) Deliver(ctx context.Context, batch []*Message) error {
+	// FIXME: should insert a batch of messages in a single INSERT statement
 	return d.tx.do(ctx, func(tx sqlTx) error {
-		queues, err := d.routing.queues(tx, msg.GetTopic())
-		if err != nil {
-			return err
-		}
-		for _, queue := range queues {
-			if err := d.insertMessage(&postgresDestinationInsertMessageArgs{
-				name:        msg.GetName(),
-				payload:     payload,
-				publishedAt: msg.GetPublishedAt(),
-				deliverAt:   msg.GetDeliverAt(),
-				queue:       queue,
-				topic:       msg.GetTopic(),
-				tx:          tx,
-				uuid:        msg.GetUUID(),
-			}); err != nil {
+		for _, msg := range batch {
+			payload, err := json.Marshal(msg)
+			if err != nil {
 				return err
+			}
+			queues, err := d.routing.queues(tx, msg.GetTopic())
+			if err != nil {
+				return err
+			}
+			for _, queue := range queues {
+				if err := d.insertMessage(&postgresDestinationInsertMessageArgs{
+					name:        msg.GetName(),
+					payload:     payload,
+					publishedAt: msg.GetPublishedAt(),
+					deliverAt:   msg.GetDeliverAt(),
+					queue:       queue,
+					topic:       msg.GetTopic(),
+					tx:          tx,
+					uuid:        msg.GetUUID(),
+				}); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type testDestinationHandler = func(ctx context.Context, msg *Message) error
+type testDestinationHandler = func(ctx context.Context, batch []*Message) error
 
 type testDestination struct {
 	handlers []testDestinationHandler
@@ -17,11 +17,11 @@ func newTestDestination() *testDestination {
 	return &testDestination{handlers: []testDestinationHandler{}}
 }
 
-func (d *testDestination) Deliver(ctx context.Context, msg *Message) error {
+func (d *testDestination) Deliver(ctx context.Context, batch []*Message) error {
 	if handler, err := d.nextHandler(); err != nil {
 		return err
 	} else {
-		return handler(ctx, msg)
+		return handler(ctx, batch)
 	}
 }
 
