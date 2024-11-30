@@ -1,6 +1,6 @@
 module github.com/markusylisiurunen/go-opinionatedevents/examples/publisher
 
-go 1.20
+go 1.23
 
 replace github.com/markusylisiurunen/go-opinionatedevents => ../../
 
